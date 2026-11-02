@@ -4,8 +4,8 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Riffle menu</title>
 <style>
-:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
-:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 9%, #eef1f4); --page: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 8%, #15191c); --page: color-mix(in srgb, var(--accent) 3%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
 * { box-sizing: border-box; }
 svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
@@ -18,6 +18,12 @@ button:disabled, button:disabled .ic, button:disabled .keys { color: var(--off);
 .ic { display: flex; flex: none; color: var(--tint); }
 .label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .keys { flex: none; color: var(--muted); font-size: 12px; }
+.zoom { display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 8px 0 16px; }
+.zoom button { flex: none; justify-content: center; gap: 0; width: 28px; height: 28px; padding: 0; border-radius: 6px; }
+.zoom button[data-zoom=reset] { width: 48px; font-variant-numeric: tabular-nums; }
+.zoom button:disabled { opacity: .4; }
+.zoom .label { margin-right: -8px; }
+.zoom button + button { margin-left: -10px; }
 hr { height: 1px; margin: 4px 0; border: 0; background: var(--line); }
 @media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
 </style>
@@ -35,7 +41,35 @@ const icon = name => {
   svg.append(use);
   return svg;
 };
+function zoomRow(item, zoom) {
+  const row = document.createElement('div');
+  row.className = 'zoom';
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', 'Zoom');
+  const ic = document.createElement('span');
+  ic.className = 'ic';
+  ic.append(icon(item.icon));
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = item.label;
+  const control = (value, name, title, on, content) => {
+    const b = document.createElement('button');
+    b.dataset.zoom = value;
+    b.setAttribute('aria-label', name);
+    b.title = title;
+    b.disabled = !on;
+    b.append(content);
+    b.onclick = () => send('zoom', {value});
+    return b;
+  };
+  row.append(ic, label,
+    control('out', 'Zoom out', 'Zoom out (Ctrl+-)', zoom.can_out, icon('minus')),
+    control('reset', `Zoom ${zoom.percent}%, select to reset`, 'Back to 100% (Ctrl+0)', true, `${zoom.percent}%`),
+    control('in', 'Zoom in', 'Zoom in (Ctrl++)', zoom.can_in, icon('plus')));
+  return row;
+}
 function render(state) {
+  const kept = document.activeElement?.dataset?.zoom; // redrawing must not lose the keyboard's place
   const dark = state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.style.setProperty('--accent', state.accent);
@@ -45,6 +79,7 @@ function render(state) {
       line.setAttribute('role', 'separator');
       return line;
     }
+    if (item.action === 'zoom') return zoomRow(item, state.zoom);
     const b = document.createElement('button');
     b.setAttribute('role', 'menuitem');
     b.disabled = item.disabled;
@@ -61,6 +96,7 @@ function render(state) {
     b.append(ic, label, keys);
     return b;
   }));
+  if (kept) items.querySelector(`[data-zoom=${kept}]:enabled`)?.focus();
   if (state.sub) items.querySelector('button').focus();
 }
 addEventListener('keydown', e => {

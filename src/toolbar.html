@@ -4,8 +4,8 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: http:">
 <title>Riffle toolbar</title>
 <style>
-:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
-:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 9%, #eef1f4); --page: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 8%, #15191c); --page: color-mix(in srgb, var(--accent) 3%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
 body.private { --strip: #141414; --bar: #242424; --ink: #f1f1f1; --hover: #3a3a3a; --line: #3f3f3f; --edge: #8e918f; --field: #141414; --muted: #d5d8d6; --off: #a0a3a1; --track: #8e918f; }
 * { box-sizing: border-box; }
 svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
@@ -52,6 +52,12 @@ body.maximized #grip { display: none; }
 #nav button { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; }
 #nav button:hover:enabled { background: var(--hover); }
 #nav button[hidden] { display: none; }
+#downloads { position: relative; }
+#nav #downloads.going { color: var(--tint); background: var(--hover); }
+#downloads.going svg { animation: arriving 1.1s ease-in-out infinite; }
+#downloads[data-count]:not([data-count=""])::after { content: attr(data-count); position: absolute; top: 0; right: 0; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--fill); color: #fff; font: 600 10px/14px "Segoe UI", sans-serif; }
+@keyframes arriving { 50% { transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { #downloads.going svg { animation: none; } }
 #nav button:disabled { color: var(--off); }
 #nav #music[aria-pressed=true] { color: var(--accent); }
 form { position: relative; flex: 1; min-width: 0; margin: 0 4px; }
@@ -63,6 +69,9 @@ form { position: relative; flex: 1; min-width: 0; margin: 0 4px; }
 #nav #shield.stopped, #nav #star[aria-pressed=true], #nav #music[aria-pressed=true] { color: var(--accent); }
 :root.dark #nav #shield.stopped, :root.dark #nav #star[aria-pressed=true], :root.dark #nav #music[aria-pressed=true], body.private #nav #shield.stopped, body.private #nav #star[aria-pressed=true], body.private #nav #music[aria-pressed=true] { color: color-mix(in srgb, var(--accent) 45%, #fff); }
 #nav #star { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; }
+#nav #zoom { position: absolute; top: 2px; right: 30px; width: 28px; height: 28px; color: var(--tint); }
+#nav #zoom svg.i { width: 16px; height: 16px; }
+#go.zoomed #address { padding-right: 64px; }
 #nav #star[aria-pressed=true] { color: var(--accent); }
 
 #bar { display: none; align-items: center; gap: 4px; height: 32px; padding: 0 8px 4px; background: var(--bar); }
@@ -105,6 +114,7 @@ body.has-bar #bar { display: flex; }
   <button data-i="reload" id="reload" aria-label="Reload" title="Reload (F5)"></button>
   <form id="go">
     <span id="security" role="img"></span>
+    <button id="zoom" type="button" hidden></button>
     <input id="address" aria-label="Address or search" placeholder="Search or enter address" spellcheck="false" autocomplete="off">
     <button data-i="star" id="star" type="button" aria-label="Bookmark this page" title="Bookmark this page (Ctrl+D)"></button>
   </form>
@@ -229,6 +239,19 @@ function render(state) {
   security.title = secure ? 'Connection is secure' : plain ? 'Not secure: this site does not use https' : '';
   security.setAttribute('aria-label', security.title || 'Search');
 
+  const going = state.downloading;
+  $('downloads').classList.toggle('going', going > 0);
+  $('downloads').dataset.count = going > 1 ? going : '';
+  $('downloads').setAttribute('aria-label', going ? `Downloads, ${going} in progress` : 'Downloads');
+  // Only when this tab is not at 100%, like Chrome and Edge, and it opens the zoom dialog.
+  const zoom = $('zoom'), zoomed = state.zoom !== 100;
+  zoom.hidden = !zoomed;
+  $('go').classList.toggle('zoomed', zoomed);
+  if (zoomed) {
+    zoom.replaceChildren(icon(state.zoom > 100 ? 'zoom-in' : 'zoom-out'));
+    zoom.title = `Zoom ${state.zoom}%`;
+    zoom.setAttribute('aria-label', `Zoom ${state.zoom}%, select to change`);
+  }
   const star = $('star');
   star.replaceChildren(icon(state.bookmarked ? 'starred' : 'star'));
   star.setAttribute('aria-pressed', state.bookmarked);
@@ -275,6 +298,7 @@ $('shield').onclick = () => send('shield');
 $('menu').onclick = () => send('menu');
 $('music').onclick = () => send('music');
 $('private').onclick = () => window.ipc.postMessage('private_tab');
+$('zoom').onclick = () => send('zoom_toggle');
 $('downloads').onclick = () => send('panel', {value: 'downloads'});
 $('all').prepend(icon('folder'));
 $('all').onclick = () => send('panel', {value: 'bookmarks'});

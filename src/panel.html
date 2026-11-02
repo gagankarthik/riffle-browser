@@ -4,23 +4,23 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
 <title>Riffle</title>
 <style>
-:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
-:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 9%, #eef1f4); --page: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 8%, #15191c); --page: color-mix(in srgb, var(--accent) 3%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
 * { box-sizing: border-box; }
 svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 html, body { margin: 0; height: 100%; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; }
 body { display: flex; }
 nav { flex: none; display: flex; flex-direction: column; gap: 4px; width: 220px; padding: 16px 12px; background: var(--strip); overflow-y: auto; position: relative; z-index: 1; box-shadow: 1px 0 10px rgb(16 40 60 / .12); }
-#brand { display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px; font-size: 18px; font-weight: 700; }
+#brand { display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px; font-size: 18px; font-weight: 600; }
 #brand svg { width: 28px; height: 28px; flex: none; }
 nav button { flex: none; display: flex; align-items: center; gap: 12px; width: 100%; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; }
 nav button:hover { background: var(--hover); }
-nav button[aria-current=page], nav button[aria-current=page]:hover { background: var(--fill); color: #fff; font-weight: 600; box-shadow: var(--shadow); }
-nav button[aria-current=page] svg.i { color: inherit; }
+nav button[aria-current=page], nav button[aria-current=page]:hover { background: var(--hover); color: var(--ink); font-weight: 600; }
+nav button[aria-current=page] svg.i { color: var(--tint); }
 #done { margin-top: auto; }
 main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px; background: var(--page); }
 main > * { max-width: 720px; margin-inline: auto; }
-h1 { font-size: 26px; font-weight: 700; margin: 0 0 20px; }
+h1 { font-size: 26px; font-weight: 600; margin: 0 0 20px; }
 .head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 input[type=search], input[type=text], input[type=number], select { height: 32px; padding: 0 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: inherit; font: inherit; }
 input[type=search] { flex: 1; min-width: 0; }
@@ -81,9 +81,9 @@ input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
 .site-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .site-row span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 nav svg.i { flex: none; width: 16px; height: 16px; color: var(--tint); }
-.sec, #rows { margin-bottom: 16px; padding: 4px 20px; border-radius: 12px; background: var(--bar); box-shadow: var(--shadow); }
+.sec, #rows { margin-bottom: 16px; padding: 4px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--bar); }
 .sec > .field:last-child, #rows > .row:last-child { border-bottom: 0; }
-.sec h2 { margin: 16px 0 4px; font-size: 13px; font-weight: 700; color: var(--tint); }
+.sec h2 { margin: 16px 0 4px; font-size: 13px; font-weight: 600; color: var(--tint); }
 .field label { font-size: 14px; font-weight: 500; }
 .field label[for] { cursor: default; align-self: stretch; }
 .field label .sub { margin-top: 2px; font-weight: 400; }
@@ -94,6 +94,23 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
 #make-default:enabled, #mark-save { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
 .pick-list, #confirm-box { box-shadow: var(--shadow); }
 [hidden] { display: none !important; }
+#task-total { margin: -8px 0 20px; color: var(--muted); }
+#task-amount { margin-right: 4px; color: var(--ink); font-size: 28px; font-weight: 600; line-height: 36px; font-variant-numeric: tabular-nums; }
+.hidden-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+#task-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+#task-table th, #task-table td { height: 40px; padding: 0 12px; text-align: left; border-bottom: 1px solid var(--line); }
+#task-table th:first-child, #task-table td:first-child { padding-left: 0; width: 60%; }
+#task-table th:last-child, #task-table td:last-child { padding-right: 0; width: 96px; }
+#task-table th { height: 32px; color: var(--muted); font-size: 12px; font-weight: 500; border-bottom-color: var(--edge); }
+#task-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#task-table .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+#task-table .kind, #task-table .asleep td { color: var(--muted); }
+#task-table .asleep .name { font-weight: 400; }
+#task-table tbody tr:hover td { background: var(--hover); }
+#task-table .many { margin-left: 8px; color: var(--muted); font-size: 12px; font-weight: 400; }
+#about-head { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+#about-head strong { display: block; font-size: 20px; }
+.about-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 @media (max-width: 560px) { nav { width: 128px; } main { padding: 16px; } }
 @media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
 </style>
@@ -103,11 +120,13 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
   <button data-page="bookmarks">Bookmarks</button>
   <button data-page="history">History</button>
   <button data-page="downloads">Downloads</button>
+  <button data-page="tasks">Task manager</button>
   <button data-page="settings">Settings</button>
   <button data-sec="general">General</button>
   <button data-sec="search">Search engine</button>
   <button data-sec="browser">Default browser</button>
   <button data-sec="files">Downloads</button>
+  <button data-sec="about">About Riffle</button>
   <button id="done">Back to page</button>
 </nav>
 <main>
@@ -126,6 +145,15 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
       <p id="mark-error" class="error" role="alert" hidden></p>
     </form>
     <div id="rows"></div>
+  </section>
+  <section id="tasks" hidden>
+    <h1>Task manager</h1>
+    <p id="task-total"><strong id="task-amount"></strong> <span id="task-detail"></span></p>
+    <table id="task-table">
+      <caption class="hidden-label">Riffle's tabs and processes, largest first</caption>
+      <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col" class="num">Memory</th></tr></thead>
+      <tbody id="task-rows"></tbody>
+    </table>
   </section>
   <section id="settings" hidden>
     <h1 id="sec-title">Settings</h1>
@@ -168,10 +196,16 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
     <div id="sec-browser" class="sec">
     <div class="field"><label>Default browser<span class="sub" id="default-note"></span></label><button class="plain" id="make-default">Make default</button></div>
     </div>
+    <div id="sec-about" class="sec">
+    <div id="about-head"><svg viewBox="0 0 32 32" width="56" height="56" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.8 9 0t9 0M7 21q4.5-4.8 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg><div><strong>Riffle</strong><span class="sub" id="about-version"></span></div></div>
+    <div class="field"><label>Updates<span class="sub" id="update-note" role="status"></span></label><button class="plain" id="check-updates">Check for updates</button></div>
+    <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub">Asks GitHub for a newer version once a day, and sends nothing else</span></label><input id="auto_update" type="checkbox"></div>
+    <div class="field"><label>Browser engine<span class="sub" id="engine-note"></span></label></div>
+    <div class="field"><label>Learn more<span class="sub">Free and open source under the MIT license</span></label><div class="about-links"><button class="plain" data-link="website">Website</button><button class="plain" data-link="notes">Release notes</button><button class="plain" data-link="source">Source code</button><button class="plain" data-link="license">License</button></div></div>
+    </div>
     <div id="sec-general-more" class="sec">
     <h2>App and data</h2>
     <div class="field" id="sites-row"><label>Site exceptions<span class="sub">Sites you changed from the shield button</span></label><div id="sites"></div></div>
-    <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub" id="update-note"></span></label><input id="auto_update" type="checkbox"></div>
     <div class="field"><label>Riffle app<span class="sub" id="app-note"></span></label><button class="plain" id="app-action"></button></div>
     <div class="field"><label>Browsing data<span class="sub">History, cookies, logins and cache. Bookmarks and settings are kept</span></label>
       <button class="plain" id="clear-data">Clear browsing data</button></div>
@@ -499,12 +533,19 @@ function render(next) {
   $('make-default').textContent = next.installed ? 'Make default' : 'Install Riffle';
   $('default-note').textContent = next.default_browser ? 'Riffle is your default browser' : next.installed ? 'Windows opens its settings page, where you confirm Riffle' : 'Windows can only offer Riffle as a browser once it is installed';
   $('app-note').textContent = next.installed ? 'Installed for this Windows user. You can also remove it from Windows Settings, Apps' : 'Adds Riffle to the Start menu and Windows Apps. No administrator rights needed';
-  $('update-note').textContent = next.update_ready ? `Version ${next.update_ready} is ready and starts the next time you open Riffle` : `You have version ${next.version}. Asks GitHub for a newer one once a day, and sends nothing else`;
+  $('about-version').textContent = `Version ${next.version}`;
+  $('engine-note').textContent = next.engine_version ? `Microsoft Edge WebView2 ${next.engine_version}` : 'Microsoft Edge WebView2';
+  $('update-note').textContent = !next.installed ? 'Only the installed copy of Riffle updates itself'
+    : next.update_ready ? `Version ${next.update_ready} is ready and starts the next time you open Riffle`
+    : {checking: 'Checking GitHub', current: 'You have the latest version', failed: 'Could not check for updates. Check your connection and try again'}[next.update_status] || 'Riffle checks for updates once a day';
+  $('check-updates').disabled = !next.installed || !!next.update_ready || next.update_status === 'checking';
   $('app-action').textContent = next.installed ? 'Uninstall Riffle' : 'Install Riffle';
   $('app-action').onclick = () => next.installed ? send('uninstall_app') : send('install_app');
   $('settings').hidden = !settings;
-  $('list').hidden = settings;
-  if (!settings) {
+  $('list').hidden = settings || next.page === 'tasks';
+  $('tasks').hidden = next.page !== 'tasks';
+  if (next.page === 'tasks') send('tasks_refresh');
+  else if (!settings) {
     $('heading').textContent = {bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads'}[next.page];
     $('clear-downloads').hidden = next.page !== 'downloads';
     $('clear-history').hidden = next.page !== 'history';
@@ -518,7 +559,7 @@ for (const b of document.querySelectorAll('nav [data-page]')) {
   b.onclick = () => { $('filter').value = ''; send('panel', {value: b.dataset.page}); };
 }
 for (const b of document.querySelectorAll('nav [data-sec]')) b.onclick = () => { section = b.dataset.sec; showSection(); };
-for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
+for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download'], ['about', 'info']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
 $('make-default').onclick = () => send(state.installed ? 'make_default' : 'install_app');
 $('download-change').onclick = () => send('choose_download_dir');
 $('mark-cancel').onclick = () => editMark(null);
@@ -526,7 +567,46 @@ $('mark-form').onsubmit = e => {
   e.preventDefault();
   send('put_bookmark', {old: editing, title: $('mark-title').value, url: $('mark-url').value});
 };
-for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
+for (const b of document.querySelectorAll('[data-link]')) b.onclick = () => send('about_link', {link: b.dataset.link});
+$('check-updates').onclick = () => send('check_updates');
+const megabytes = bytes => `${(bytes / 1048576).toFixed(bytes < 104857600 ? 1 : 0)} MB`;
+function renderTasks(rows) {
+  // Tabs stay separate. Helper processes with one job read better as one line.
+  const lines = [];
+  for (const r of rows) {
+    const same = r.kind !== 'Tab' && r.kind !== 'Asleep' && lines.find(l => l.name === r.name && l.kind === r.kind);
+    if (same) { same.bytes += r.bytes; same.count++; } else lines.push({...r, count: 1});
+  }
+  lines.sort((x, y) => y.bytes - x.bytes);
+  const total = rows.reduce((sum, r) => sum + r.bytes, 0);
+  const asleep = rows.filter(r => r.kind === 'Asleep').length;
+  $('task-amount').textContent = megabytes(total);
+  $('task-detail').textContent = `in use across ${rows.length - asleep} processes` + (asleep ? `, with ${asleep} ${asleep === 1 ? 'tab' : 'tabs'} asleep` : '');
+  $('task-rows').replaceChildren(...lines.map(r => {
+    const tr = document.createElement('tr');
+    tr.classList.toggle('asleep', r.kind === 'Asleep');
+    const name = document.createElement('td');
+    name.className = 'name';
+    name.textContent = r.name;
+    name.title = r.name;
+    if (r.count > 1) {
+      const many = document.createElement('span');
+      many.className = 'many';
+      many.textContent = `${r.count} processes`;
+      name.append(many);
+    }
+    const kind = document.createElement('td');
+    kind.className = 'kind';
+    kind.textContent = r.kind;
+    const memory = document.createElement('td');
+    memory.className = 'num';
+    memory.textContent = r.kind === 'Asleep' ? 'Freed' : megabytes(r.bytes);
+    tr.append(name, kind, memory);
+    return tr;
+  }));
+}
+setInterval(() => { if (state?.page === 'tasks') send('tasks_refresh'); }, 2000);
+for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['tasks', 'tasks'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
 $('done').prepend(icon('back'));
 $('done').onclick = () => send('close_panel');
 $('filter').oninput = showList;

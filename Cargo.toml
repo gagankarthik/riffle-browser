@@ -1,19 +1,19 @@
 [package]
 name = "riffle-browser"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-description = "Riffle: a fast, lightweight Windows web browser with a built-in ad blocker"
+description = "Riffle: a small, lightweight Windows web browser with a built-in ad blocker"
 license = "MIT"
 repository = "https://github.com/gagankarthik/riffle-browser"
 
 [dependencies]
-adblock = { version = "0.13.5", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
+adblock = { version = "0.13.5", default-features = false, features = ["css-validation", "embedded-domain-resolver", "full-regex-handling"] }
 serde_json = "1.0.154"
 tao = "0.37.2"
 url = "2.5.8"
 wry = { version = "0.57.1", features = ["devtools"] }
 webview2-com = "0.39.1"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 lto = true

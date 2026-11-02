@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle bookmark</title>
+<style>
+:root { --accent: #0b6e8f; --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); color-scheme: light; }
+:root.dark { --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --tint: oklch(from var(--accent) max(l, .8) c h); color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+form { display: block; padding: 16px; }
+h1 { margin: 0 0 12px; font-size: 14px; font-weight: 600; line-height: 20px; }
+label { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+input { display: block; width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: text; }
+#name { margin-bottom: 10px; }
+#error { margin: 6px 0 0; color: #b3261e; font-size: 12px; line-height: 16px; }
+:root.dark #error { color: #f2b8b5; }
+[hidden] { display: none !important; }
+.actions { margin-top: 14px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }
+button { height: 32px; padding: 0 14px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bar); color: inherit; font: inherit; transition: background-color .12s ease-out; }
+button:hover { background: var(--hover); }
+#done { border-color: var(--fill); background: var(--fill); color: #fff; }
+#done:hover { background: var(--fill); filter: brightness(1.15); }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+<form id="sheet">
+  <h1 id="heading"></h1>
+  <label for="name">Name</label>
+  <input id="name" type="text" maxlength="300" spellcheck="false">
+  <label for="url">Link</label>
+  <input id="url" type="text" spellcheck="false" aria-describedby="error">
+  <p id="error" role="alert" hidden>Enter a web address, such as example.com</p>
+  <div class="actions">
+    <button id="remove" type="button">Remove</button>
+    <button id="done">Done</button>
+  </div>
+</form>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+let gone = false;
+const leave = (cmd, extra) => { if (!gone) { gone = true; send(cmd, extra); } };
+const fields = () => ({value: $('name').value, url: $('url').value});
+const save = () => leave('bookmark_save', fields());
+const fit = () => send('bookmark_size', {value: $('sheet').offsetHeight});
+function badLink() {
+  $('error').hidden = false;
+  fit();
+  $('url').setAttribute('aria-invalid', 'true');
+  $('url').focus();
+}
+function render(state) {
+  const dark = state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  $('heading').textContent = state.added ? 'Bookmark added' : 'Edit bookmark';
+  $('name').value = state.title; // value and textContent: these come from a web page
+  $('url').value = state.url;
+  $('name').focus();
+  $('name').select();
+  fit();
+}
+$('sheet').onsubmit = e => { e.preventDefault(); $('error').hidden = true; send('bookmark_save', {...fields(), strict: true}); };
+$('remove').onclick = () => leave('bookmark_remove');
+addEventListener('keydown', e => { if (e.key === 'Escape') leave('bookmark_close'); });
+// Clicking elsewhere keeps what was typed. The delay rides out focus moving between this window and its page.
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) save(); }, 100));
+send('bookmark_ready');
+</script>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" class="__CLASS__">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle developer tools</title>
+<style>
+:root { --bar: #ffffff; --ink: #14212b; --hover: #d7e6ec; --line: #d5dade; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not(.light) { --bar: #262b2f; --ink: #edf1f4; --hover: #3a4a52; --line: #3f464b; color-scheme: dark; } }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --hover: #3a4a52; --line: #3f464b; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 12px "Segoe UI", sans-serif; user-select: none; }
+body { display: grid; place-items: center; }
+button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none; color: inherit; transition: background-color .12s ease-out; }
+button:hover { background: var(--hover); }
+button:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+svg.i { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+<!--ICONS-->
+<button id="close" aria-label="Close developer tools" title="Close developer tools (F12)"><svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></button>
+<script>
+document.getElementById('close').onclick = () => window.ipc.postMessage('dev_tools');
+</script>
+</html>

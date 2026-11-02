@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle zoom</title>
+<style>
+:root { --bar: #ffffff; --ink: #14212b; --hover: #d7e6ec; --edge: #6d8791; color-scheme: light; }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --hover: #3a4a52; --edge: #8b949a; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { display: flex; align-items: center; gap: 4px; padding: 0 8px 0 12px; }
+output { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+button { flex: none; display: grid; place-items: center; height: 32px; min-width: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; transition: background-color .12s ease-out; }
+button:hover:enabled { background: var(--hover); }
+button:disabled { opacity: .4; }
+#reset { margin-left: 4px; padding: 0 12px; border: 1px solid var(--edge); }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+<!--ICONS-->
+<output id="level" aria-live="polite"></output>
+<button id="out" aria-label="Zoom out" title="Zoom out (Ctrl+-)"><svg class="i" aria-hidden="true"><use href="#i-minus"></use></svg></button>
+<button id="in" aria-label="Zoom in" title="Zoom in (Ctrl++)"><svg class="i" aria-hidden="true"><use href="#i-plus"></use></svg></button>
+<button id="reset" title="Back to 100% (Ctrl+0)">Reset</button>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+let timer = 0;
+const later = ms => { clearTimeout(timer); timer = setTimeout(() => send('zoom_close'), ms); };
+function render(state) {
+  document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  $('level').textContent = state.percent + '%';
+  $('out').disabled = !state.can_out;
+  $('in').disabled = !state.can_in;
+  $('reset').disabled = state.percent === 100;
+  later(3000);
+}
+for (const [id, value] of [['out', 'out'], ['in', 'in'], ['reset', 'reset']]) $(id).onclick = () => send('zoom', {value});
+// Stays while the pointer is on it, so it never vanishes under a click.
+addEventListener('mouseenter', () => clearTimeout(timer));
+addEventListener('mouseleave', () => later(1500));
+send('zoom_ready');
+</script>
+</html>

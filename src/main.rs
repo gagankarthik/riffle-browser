@@ -19,12 +19,15 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{WebResourceRequestedEventHandler, take_pwstr};
-use webview2_com::{AcceleratorKeyPressedEventHandler, ContainsFullScreenElementChangedEventHandler};
-use windows::Win32::Foundation::HWND;
+use webview2_com::{AcceleratorKeyPressedEventHandler, AddScriptToExecuteOnDocumentCreatedCompletedHandler, ContainsFullScreenElementChangedEventHandler, GetProcessExtendedInfosCompletedHandler, NavigationStartingEventHandler};
+use windows::Win32::Foundation::{COLORREF, CloseHandle, HWND};
+use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX};
+use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::Foundation::{LPARAM, RECT, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, EnumWindows, FindWindowExW, GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, HWND_TOP, IsWindow, IsWindowVisible, PostMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_SHOWWINDOW, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WM_CLOSE, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_POPUP, WS_THICKFRAME};
-use windows::Win32::UI::Shell::{FOLDERID_Desktop, FOLDERID_Downloads, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, FileOpenDialog, FileSaveDialog, IFileDialog, IShellItem, KF_FLAG_DEFAULT, SHCreateItemFromParsingName, SHGetKnownFolderPath, SIGDN_FILESYSPATH};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, EnumWindows, FindWindowExW, GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, HWND_TOP, IsWindow, IsWindowVisible, PostMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, LWA_ALPHA, SetLayeredWindowAttributes, WS_EX_LAYERED, CHILDID_SELF, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_SHOW, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WM_CLOSE, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_POPUP, WS_THICKFRAME};
+use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
+use windows::Win32::UI::Shell::{FOLDERID_Desktop, FOLDERID_Downloads, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, FileOpenDialog, FileSaveDialog, IFileDialog, IShellItem, KF_FLAG_DEFAULT, SHCreateItemFromParsingName, SHCreateMemStream, SHGetKnownFolderPath, SIGDN_FILESYSPATH};
 use windows::core::{BOOL, Interface, PCWSTR, PWSTR, w};
 use wry::{MemoryUsageLevel, NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows};
 
@@ -42,12 +45,20 @@ const DEFAULT_LIVE_TABS: u64 = 3; // the rest sleep and free their memory until 
 const SEARCH_URL: &str = "https://duckduckgo.com/?k1=-1&q="; // k1=-1 turns off DuckDuckGo's own ads
 const AGENT_PORT: u16 = 9222;
 const POPUP_MIN_GAP_MS: u128 = 1000;
+const SCRIPTLETS_JS: &str = include_str!("scriptlets.js");
 const TOOLBAR_HTML: &str = include_str!("toolbar.html");
 const PANEL_HTML: &str = include_str!("panel.html");
 const ICONS_HTML: &str = include_str!("icons.html");
 const MUSIC_HTML: &str = include_str!("music.html");
 const MENU_HTML: &str = include_str!("menu.html");
 const SHIELD_HTML: &str = include_str!("shield.html");
+const BOOKMARK_HTML: &str = include_str!("bookmark.html");
+const ZOOM_HTML: &str = include_str!("zoom.html");
+const ZOOM_POPUP: (f64, f64) = (248.0, 52.0);
+const ZOOM_LEVELS: &[f64] = &[0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]; // the steps Chrome and Edge use
+const BOOKMARK_WIDTH: f64 = 340.0;
+const STAR_BUTTON_RIGHT: f64 = 186.0; // distance from the star's right edge to the window's
+const ZOOM_BUTTON_RIGHT: f64 = 214.0; // the magnifier beside the star, which the zoom dialog hangs from
 const SHIELD_WIDTH: f64 = 320.0;
 const SHIELD_BUTTON_RIGHT: f64 = 116.0; // distance from the shield button's right edge to the window's
 const MUSIC_WIDTH: f64 = 320.0;
@@ -59,7 +70,13 @@ const INSTALL_HTML: &str = include_str!("install.html");
 const SUGGEST_HTML: &str = include_str!("suggest.html");
 const DOWNLOAD_HTML: &str = include_str!("download.html");
 const DOWNLOAD_BUBBLE: (f64, f64) = (340.0, 104.0);
-const DEVTOOLS_SCAN_MS: u64 = 250;
+const DEVTOOLS_CLOSE: f64 = 32.0; // the close button laid over the right end of DevTools' own tab row, where Chrome and Edge put theirs
+const DEVTOOLS_HTML: &str = include_str!("devtools.html");
+const DEVTOOLS_ARMED_SECS: u64 = 3; // after asking for DevTools, how long a new engine window is taken to be it
+const DEVTOOLS_SETTLE_SECS: u64 = 2; // docked this long, a DevTools window has stayed
+const DEVTOOLS_RETRIES: u32 = 2;
+const DEVTOOLS_HIDE_SECS: u64 = 4; // a hidden window not docked by now comes back, so DevTools can never be lost
+const DEVTOOLS_SCAN_MS: u64 = 1000; // only finds DevTools opened from the page's own menu, and this wakes the browser
 const DEVTOOLS_SHARE: f64 = 0.45; // of the window width, like a browser's docked panel
 const DEVTOOLS_DIVIDER: f64 = 6.0; // the bare window showing between page and DevTools, dragged to resize
 const DEVTOOLS_BURST_MS: u64 = 15; // right after opening, so the floating window shows for as little as possible
@@ -79,6 +96,7 @@ const FILTER_LISTS: &[(&str, &str)] = &[
     ("ublock-badware.txt", "https://ublockorigin.github.io/uAssets/filters/badware.min.txt"),
     ("ublock-privacy.txt", "https://ublockorigin.github.io/uAssets/filters/privacy.min.txt"),
     ("ublock-unbreak.txt", "https://ublockorigin.github.io/uAssets/filters/unbreak.min.txt"),
+    ("ublock-quick-fixes.txt", "https://ublockorigin.github.io/uAssets/filters/quick-fixes.min.txt"),
     ("peter-lowe.txt", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext"),
 ];
 // The small scripts uBlock's rules call on, for ads and anti-adblock walls that blocking requests cannot stop.
@@ -107,6 +125,8 @@ const MENU: &[(&str, &str, &str, &str)] = &[
     ("History", "Ctrl+H", "clock", "history"),
     ("Downloads", "Ctrl+J", "download", "downloads"),
     ("", "", "", ""),
+    ("Zoom", "", "search", "zoom"),
+    ("", "", "", ""),
     ("Cast screen", "Win+K", "cast", "cast"),
     ("Print", "Ctrl+P", "print", "print"),
     ("", "", "", ""),
@@ -119,6 +139,8 @@ const DEVELOPER_MENU: &[(&str, &str, &str, &str)] = &[
     ("View page source", "Ctrl+U", "code", "view_source"),
     ("Developer tools", "F12", "tools", "dev_tools"),
     ("Task manager", "", "tasks", "task_manager"),
+    ("", "", "", ""),
+    ("Close", "", "close", "menu_close"),
 ];
 const MENU_WIDTH: f64 = 280.0;
 
@@ -151,12 +173,13 @@ const AD_SCRIPT: &str = r#"
 (() => {
   const yt = /(^|\.)youtube\.com$/.test(location.hostname);
   const css = () => {
+    if (!document.documentElement) return new MutationObserver((_, o) => { if (document.documentElement) { o.disconnect(); css(); } }).observe(document, {childList: true});
     const s = document.createElement('style');
     s.textContent = 'ins.adsbygoogle,iframe[src*="doubleclick"],iframe[src*="googlesyndication"],[id^="google_ads_"],[id^="div-gpt-ad"],[data-ad-slot],[data-ad-client]{display:none!important}'
       + (yt ? 'ytd-ad-slot-renderer,ytd-in-feed-ad-layout-renderer,ytd-banner-promo-renderer,ytd-promoted-sparkles-web-renderer,#masthead-ad,#player-ads,.ytp-ad-overlay-container{display:none!important}' : '');
     (document.head || document.documentElement).appendChild(s);
   };
-  if (document.documentElement) css(); else addEventListener('DOMContentLoaded', css);
+  css();
   // Tells the browser whether each click was on a real link, so pop-ups and redirects it did not explain can be stopped.
   // shortcut: a page aiming at Riffle could post click:1 itself. Would need WebView2's own gesture flag, which wry hides.
   const link = e => e.target.closest?.('a[href]');
@@ -187,18 +210,28 @@ const AD_SCRIPT: &str = r#"
   if (window !== top) return;
   // Reports class names and ids so the filter lists can hide matching ad boxes, including ones added later.
   const seen = new Set();
-  let timer = 0, first = true;
+  let timer = 0, first = true, added = [];
   const report = () => {
     timer = 0;
     const classes = [], ids = [];
-    for (const el of document.querySelectorAll('[class],[id]')) {
+    const note = el => {
       if (el.id && !seen.has('#' + el.id)) { seen.add('#' + el.id); ids.push(el.id); }
       for (const c of el.classList) if (!seen.has('.' + c)) { seen.add('.' + c); classes.push(c); }
+    };
+    // Only what was added, so a busy page does not rescan its whole document.
+    for (const root of first ? [document.documentElement] : added) {
+      if (root.nodeType !== 1) continue;
+      note(root);
+      root.querySelectorAll('[class],[id]').forEach(note);
     }
+    added = [];
     if (first || classes.length || ids.length) window.ipc.postMessage('ads:' + JSON.stringify({first, classes, ids}));
     first = false;
   };
-  const later = () => { if (!timer) timer = setTimeout(report, 400); };
+  const later = records => {
+    for (const r of records) for (const n of r.addedNodes) added.push(n);
+    if (!timer) timer = setTimeout(report, 400);
+  };
   addEventListener('DOMContentLoaded', () => { report(); new MutationObserver(later).observe(document.documentElement, {childList: true, subtree: true}); });
   if (!yt) return;
   setInterval(() => {
@@ -211,12 +244,56 @@ const AD_SCRIPT: &str = r#"
 })();
 "#;
 
+// uBlock's rules that plain CSS cannot express, such as hiding a box because of the words in it.
+const PROCEDURAL_SCRIPT: &str = r#"
+(rules => {
+  const has = (el, arg) => {
+    const re = arg.match(/^\/(.*)\/([a-z]*)$/);
+    return re ? new RegExp(re[1], re[2]).test(el.textContent) : el.textContent.includes(arg);
+  };
+  const up = (el, arg) => {
+    if (!/^\d+$/.test(arg)) return el.parentElement?.closest(arg);
+    for (let i = +arg; el && i; i--) el = el.parentElement;
+    return el;
+  };
+  const pick = stages => {
+    let els = stages[0].type === 'css-selector' ? [...document.querySelectorAll(stages[0].arg)] : [];
+    for (const {type, arg} of stages.slice(1)) {
+      if (type === 'has-text') els = els.filter(el => has(el, arg));
+      else if (type === 'min-text-length') els = els.filter(el => el.textContent.length >= +arg);
+      else if (type === 'upward') els = els.map(el => up(el, arg)).filter(Boolean);
+      else if (type === 'css-selector') els = els.flatMap(el => [...el.querySelectorAll(':scope ' + arg)]);
+      else return []; // a step this does not understand must not hide the wrong thing
+    }
+    return els;
+  };
+  const act = (el, action) => {
+    if (!action) el.style.setProperty('display', 'none', 'important');
+    else if (action.type === 'remove') el.remove();
+    else if (action.type === 'style') el.style.cssText += ';' + action.arg;
+    else if (action.type === 'remove-attr') el.removeAttribute(action.arg);
+    else if (action.type === 'remove-class') el.classList.remove(action.arg);
+  };
+  const run = () => {
+    timer = 0;
+    for (const rule of rules) {
+      try { for (const el of pick(rule.selector)) act(el, rule.action); } catch {}
+    }
+  };
+  let timer = 0;
+  addEventListener('DOMContentLoaded', () => {
+    run();
+    new MutationObserver(() => { if (!timer) timer = setTimeout(run, 1000); }).observe(document.documentElement, {childList: true, subtree: true});
+  });
+})
+"#;
+
 // Forwards browser shortcuts from Riffle's own pages. Web pages never get this: see native_keys.
 const KEY_SCRIPT: &str = r#"
 if (window === top) addEventListener('keydown', e => {
   if (e.key === 'F12') { e.preventDefault(); return window.ipc.postMessage('dev_tools'); }
   if (!e.ctrlKey || e.altKey) return;
-  const name = {t: 'new_tab', w: 'close_tab', l: 'focus_address', d: 'bookmark', h: 'history', j: 'downloads', T: 'reopen_tab', N: 'private_tab', O: 'bookmarks', I: 'dev_tools', u: 'view_source', Tab: e.shiftKey ? 'prev_tab' : 'next_tab'}[e.key];
+  const name = {'+': 'zoom_in', '=': 'zoom_in', '-': 'zoom_out', _: 'zoom_out', 0: 'zoom_reset', t: 'new_tab', w: 'close_tab', l: 'focus_address', d: 'bookmark', h: 'history', j: 'downloads', T: 'reopen_tab', N: 'private_tab', O: 'bookmarks', I: 'dev_tools', u: 'view_source', Tab: e.shiftKey ? 'prev_tab' : 'next_tab'}[e.key];
   if (name) { e.preventDefault(); window.ipc.postMessage(name); }
 }, true);
 "#;
@@ -274,6 +351,8 @@ enum Msg {
     DevtoolsScan,
     Fullscreen(u64, bool),
     UpdateReady(String),
+    UpdateChecked(Option<Option<String>>),
+    Processes(Vec<(u32, COREWEBVIEW2_PROCESS_KIND, Vec<String>)>),
 }
 
 struct Tab {
@@ -290,6 +369,7 @@ struct Tab {
     guard: Rc<RefCell<Guard>>,
     view: Option<WebView>, // None = asleep
     devtools: Option<isize>, // its DevTools window, docked inside the browser window
+    zoom: f64, // kept here so it survives the tab sleeping
 }
 
 // A real floating window, so Windows gives it rounded corners and a shadow, and it can pass the browser's edges.
@@ -327,6 +407,7 @@ struct Browser {
     active: u64,
     fullscreen: bool, // the selected tab's video or element fills the screen
     update_ready: Option<String>, // the version that starts next time
+    update_status: &'static str, // what the last check from Settings found
     next_id: u64,
     clock: u64,
     last_popup: std::time::Instant,
@@ -347,6 +428,8 @@ struct Browser {
     menu_developer: bool, // showing the Developer list
     devtools_share: f64,
     devtools_host: Option<isize>, // clips every tab's DevTools down to its content
+    devtools_wanted: Option<(u64, u32, Instant)>, // (tab, retries used, since) after asking, until it has stayed open
+    devtools_header: Option<WebView>, // Chromium's own close button is cut off with its title bar
     devtools_frame: (i32, i32, i32, i32), // the title bar and edges to clip: left, top, right, bottom
     divider_drag: bool,
     download_bubble: Option<Popup>,
@@ -358,6 +441,12 @@ struct Browser {
     suggest_box: (f64, f64), // the address box's left edge and width
     shield: Option<Popup>,
     shield_closed: std::time::Instant,
+    bookmark_dialog: Option<Popup>,
+    bookmark_height: f64, // measured by the dialog, which grows to show an error
+    zoom_popup: Option<Popup>,
+    bookmark_closed: std::time::Instant,
+    bookmark_url: String, // the bookmark that dialog is editing, kept in case the tab moves on
+    bookmark_added: bool, // just now, rather than opened to edit
     shield_height: f64, // measured by the dialog, since its text varies
 }
 
@@ -428,6 +517,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         active: 0,
         fullscreen: false,
         update_ready: None,
+        update_status: "",
         next_id: 1,
         clock: 0,
         last_popup: std::time::Instant::now(),
@@ -448,6 +538,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         menu_developer: false,
         devtools_share: DEVTOOLS_SHARE,
         devtools_host: None,
+        devtools_wanted: None,
+        devtools_header: None,
         devtools_frame: (0, 0, 0, 0),
         divider_drag: false,
         download_bubble: None,
@@ -459,6 +551,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         suggest_box: (0.0, 0.0),
         shield: None,
         shield_closed: std::time::Instant::now(),
+        bookmark_dialog: None,
+        bookmark_height: 220.0,
+        zoom_popup: None,
+        bookmark_closed: std::time::Instant::now(),
+        bookmark_url: String::new(),
+        bookmark_added: false,
         shield_height: 200.0,
     };
     browser.build_toolbar()?;
@@ -498,6 +596,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 browser.music = None;
                 browser.menu = None;
                 browser.shield = None;
+                browser.bookmark_dialog = None;
+                browser.zoom_popup = None;
                 browser.suggest = None;
                 browser.download_bubble = None;
             }
@@ -515,8 +615,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             // The other window (normal or private) may have changed them.
             // When the window itself holds the focus, such as after Alt+Tab, Esc lands here instead of in the page.
             Event::WindowEvent { event: WindowEvent::KeyboardInput { event, .. }, .. } => {
-                if event.physical_key == KeyCode::Escape && event.state == ElementState::Pressed {
+                if event.state == ElementState::Pressed && event.physical_key == KeyCode::Escape {
                     browser.leave_fullscreen();
+                }
+                // SAFETY: GetKeyState takes a plain value and keeps nothing.
+                if event.state == ElementState::Pressed && !event.repeat && unsafe { GetKeyState(0x11) } < 0 {
+                    let typed = event.key_without_modifiers();
+                    let how = match (typed.to_text(), event.physical_key) {
+                        (Some("=" | "+"), _) | (_, KeyCode::NumpadAdd) => "in",
+                        (Some("-" | "_"), _) | (_, KeyCode::NumpadSubtract) => "out",
+                        (Some("0"), _) | (_, KeyCode::Numpad0) => "reset",
+                        _ => "",
+                    };
+                    if !how.is_empty() {
+                        browser.zoom_by_key(how, target);
+                    }
                 }
             }
             Event::WindowEvent { event: WindowEvent::Focused(true), .. } => {
@@ -632,6 +745,7 @@ impl Browser {
         let built = WebViewBuilder::new_with_web_context(&mut self.context)
             .with_additional_browser_args(self.args.clone())
             .with_focused(focus) // on by default, which would pull typing out of the address bar
+            .with_initialization_script(KEY_SCRIPT)
             .with_bounds(Rect { position: LogicalPosition::new(0.0, 0.0).into(), size: area.size })
             .with_html(html.replace("<!--ICONS-->", ICONS_HTML))
             .with_drag_drop_handler(|_| true)
@@ -663,8 +777,8 @@ impl Browser {
         }
     }
 
-    // shortcut: runs as the page starts rather than before it, and in the top frame only, so a few anti-adblock
-    // scripts can get in first. Upgrade by adding it through AddScriptToExecuteOnDocumentCreated per navigation.
+    // The backup for early_scriptlets, in case the engine had not finished loading when the page was asked for.
+    // shortcut: top frame only, so ads inside iframes keep their own scripts. Would need per-frame scripting.
     fn inject_scriptlets(&self, id: u64) {
         let (true, Some(engine)) = (self.adblock, ENGINE.get()) else { return };
         let Some(tab) = self.tabs.iter().find(|t| t.id == id) else { return };
@@ -672,9 +786,9 @@ impl Browser {
         if site_is_allowed(&tab.url) {
             let _ = view.evaluate_script("window.__riffleAllow = true");
         } else if is_web(&tab.url) {
-            let script = engine.url_cosmetic_resources(&tab.url).injected_script;
+            let script = early_script(engine, &tab.url);
             if !script.is_empty() {
-                let _ = view.evaluate_script(&script);
+                let _ = view.evaluate_script(&script); // does nothing if early_scriptlets got there first
             }
         }
     }
@@ -789,7 +903,7 @@ impl Browser {
             .collect();
         let private = self.tabs.iter().any(|t| t.id == self.active && t.private);
         menu.place(&self.window, self.menu_bounds());
-        let _ = menu.evaluate_script(&format!("render({})", json!({"items": items, "theme": self.settings["theme"], "private": private, "sub": self.menu_developer, "accent": self.settings["accent"]})));
+        let _ = menu.evaluate_script(&format!("render({})", json!({"items": items, "theme": self.settings["theme"], "private": private, "sub": self.menu_developer, "zoom": self.zoom_state(), "accent": self.settings["accent"]})));
     }
 
     fn pick_menu_item(&mut self, action: &str) {
@@ -844,6 +958,8 @@ impl Browser {
         self.music = None;
         self.menu = None;
         self.shield = None;
+        self.bookmark_dialog = None;
+        self.zoom_popup = None;
         self.panel_page = page.to_string();
         if self.panel.is_some() {
             self.render_panel();
@@ -881,11 +997,76 @@ impl Browser {
         }
     }
 
+    // Riffle's own list, because the engine's task manager window names itself after WebView2 and cannot be rebranded.
+    fn request_processes(&self) {
+        let Some(toolbar) = &self.toolbar else { return };
+        let proxy = self.proxy.clone();
+        // SAFETY: COM calls on the UI thread that owns this web view; returned strings are taken once by take_pwstr.
+        unsafe {
+            let handler = GetProcessExtendedInfosCompletedHandler::create(Box::new(move |_, list| {
+                let Some(list) = list else { return Ok(()) };
+                let mut count = 0;
+                list.Count(&mut count)?;
+                let mut found = Vec::new();
+                for i in 0..count {
+                    let item = list.GetValueAtIndex(i)?;
+                    let info = item.ProcessInfo()?;
+                    let (mut pid, mut kind) = (0, COREWEBVIEW2_PROCESS_KIND_UTILITY);
+                    info.ProcessId(&mut pid)?;
+                    info.Kind(&mut kind)?;
+                    let frame_list = item.AssociatedFrameInfos()?; // named, as the iterator needs it to stay alive
+                    let frames = frame_list.GetIterator()?;
+                    let mut sources = Vec::new();
+                    let mut more = BOOL(0);
+                    frames.HasCurrent(&mut more)?;
+                    while more.as_bool() {
+                        let mut raw = PWSTR::null();
+                        let frame = frames.GetCurrent()?;
+                        frame.Source(&mut raw)?;
+                        sources.push(take_pwstr(raw));
+                        frames.MoveNext(&mut more)?;
+                    }
+                    found.push((pid as u32, kind, sources));
+                }
+                drop(proxy.send_event(Msg::Processes(found)));
+                Ok(())
+            }));
+            let _ = toolbar.environment().cast::<ICoreWebView2Environment13>().map(|e| e.GetProcessExtendedInfos(&handler));
+        }
+    }
+
+    fn render_processes(&self, list: Vec<(u32, COREWEBVIEW2_PROCESS_KIND, Vec<String>)>) {
+        let Some(panel) = self.panel.as_ref().filter(|_| self.panel_page == "tasks") else { return };
+        let mut rows = vec![json!({"name": "Riffle", "kind": "App", "bytes": process_memory(std::process::id())})];
+        for (pid, kind, sources) in list {
+            let (name, kind) = match kind {
+                COREWEBVIEW2_PROCESS_KIND_BROWSER => ("Browser engine".to_string(), "Engine"),
+                COREWEBVIEW2_PROCESS_KIND_GPU => ("Graphics".to_string(), "Engine"),
+                COREWEBVIEW2_PROCESS_KIND_RENDERER => {
+                    let titles: Vec<&str> = self.tabs.iter().filter(|t| sources.contains(&t.url)).map(|t| t.title.as_str()).collect();
+                    let web = sources.iter().find(|s| is_web(s)).and_then(|s| site_of(s));
+                    match (titles.is_empty(), web) {
+                        (false, _) => (titles.join(", "), "Tab"),
+                        (true, Some(site)) => (site, "Tab"),
+                        (true, None) => ("Riffle interface".to_string(), "App"),
+                    }
+                }
+                _ => ("Background service".to_string(), "Engine"),
+            };
+            rows.push(json!({"name": name, "kind": kind, "bytes": process_memory(pid)}));
+        }
+        rows.sort_by_key(|r| std::cmp::Reverse(r["bytes"].as_u64()));
+        for tab in self.tabs.iter().filter(|t| t.view.is_none()) {
+            rows.push(json!({"name": tab.title, "kind": "Asleep", "bytes": 0}));
+        }
+        let _ = panel.evaluate_script(&format!("renderTasks({})", Value::Array(rows)));
+    }
+
     fn render_panel(&self) {
         let Some(panel) = &self.panel else { return };
         let mut history = parse_history(&read_lossy(&self.history_path()).unwrap_or_default());
         history.reverse();
-        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "version": env!("CARGO_PKG_VERSION"), "update_ready": self.update_ready, "default_browser": self.panel_page == "settings" && is_default_browser()});
+        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "version": env!("CARGO_PKG_VERSION"), "update_ready": self.update_ready, "update_status": self.update_status, "engine_version": wry::webview_version().ok(), "default_browser": self.panel_page == "settings" && is_default_browser()});
         let _ = panel.evaluate_script(&format!("render({state})"));
     }
 
@@ -915,7 +1096,7 @@ impl Browser {
             let id = self.next_id;
             self.next_id += 1;
             // Left asleep: only the selected tab loads, so restoring many tabs stays fast.
-            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None });
+            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None, zoom: 1.0 });
         }
     }
 
@@ -991,16 +1172,68 @@ impl Browser {
         if !is_web(&tab.url) {
             return;
         }
+        // The dialog is where it gets renamed or removed, so the star never removes anything by itself.
         let url = tab.url.clone();
-        let before = self.bookmarks.len();
-        self.bookmarks.retain(|b| b["url"] != url.as_str());
-        if self.bookmarks.len() == before {
+        let added = !self.bookmarks.iter().any(|b| b["url"] == url.as_str());
+        if added {
             let icon = if tab.private { None } else { tab.icon.clone() };
-            self.bookmarks.push(json!({"url": url, "title": tab.title, "icon": icon}));
+            let title = if tab.title.trim().is_empty() { url.as_str() } else { tab.title.as_str() };
+            self.bookmarks.push(json!({"url": url, "title": title, "icon": icon}));
+            self.save_bookmarks();
+            self.layout();
+            self.sync_toolbar();
         }
-        self.save_bookmarks();
-        self.layout();
+        self.bookmark_url = url;
+        self.bookmark_added = added;
+        // Through the event loop, because this can start from a key press, which has no window target to hand.
+        drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "bookmark_dialog"}).to_string())));
+    }
+
+    fn zoom_bounds(&self) -> Rect {
+        let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+        let width = ZOOM_POPUP.0.min(size.width);
+        Rect { position: LogicalPosition::new((size.width - ZOOM_BUTTON_RIGHT - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, ZOOM_POPUP.1).into() }
+    }
+
+    fn active_zoom(&self) -> f64 {
+        self.tabs.iter().find(|t| t.id == self.active).map_or(1.0, |t| t.zoom)
+    }
+
+    fn change_zoom(&mut self, how: &str) {
+        let Some(tab) = self.tabs.iter_mut().find(|t| t.id == self.active) else { return };
+        tab.zoom = next_zoom(tab.zoom, how);
+        if let Some(view) = &tab.view {
+            set_view_zoom(view, tab.zoom);
+        }
+        self.render_zoom();
         self.sync_toolbar();
+    }
+
+    fn zoom_by_key(&mut self, how: &str, target: &EventLoopWindowTarget<Msg>) {
+        self.change_zoom(how);
+        if self.zoom_popup.is_none() && !self.fullscreen {
+            self.zoom_popup = self.build_popup(target, ZOOM_HTML, "Riffle zoom", self.zoom_bounds(), false);
+        }
+    }
+
+    fn zoom_state(&self) -> Value {
+        let zoom = self.active_zoom();
+        json!({"percent": (zoom * 100.0).round() as u32, "can_in": next_zoom(zoom, "in") != zoom, "can_out": next_zoom(zoom, "out") != zoom, "theme": self.settings["theme"], "private": self.tabs.iter().any(|t| t.id == self.active && t.private)})
+    }
+
+    fn render_zoom(&self) {
+        if let Some(popup) = &self.zoom_popup {
+            let _ = popup.evaluate_script(&format!("render({})", self.zoom_state()));
+        }
+        if self.menu.is_some() {
+            self.render_menu();
+        }
+    }
+
+    fn bookmark_bounds(&self) -> Rect {
+        let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+        let width = BOOKMARK_WIDTH.min(size.width);
+        Rect { position: LogicalPosition::new((size.width - STAR_BUTTON_RIGHT - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, self.bookmark_height).into() }
     }
 
     fn save_bookmarks(&self) {
@@ -1037,6 +1270,8 @@ impl Browser {
         self.music = None;
         self.menu = None;
         self.shield = None;
+        self.bookmark_dialog = None;
+        self.zoom_popup = None;
         self.suggest = None;
         self.download_bubble = None;
         if let Some(toolbar) = &self.toolbar {
@@ -1084,13 +1319,17 @@ impl Browser {
             }
             "dev_tools" => {
                 self.close_panel();
+                self.devtools_wanted = None;
+                let mut opened = None;
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == self.active) {
                     match tab.devtools.take() {
                         // SAFETY: only asks the window to close, and fails harmlessly if it already has.
-                        Some(hwnd) => drop(unsafe { PostMessageW(Some(HWND(hwnd as _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }),
+                        Some(hwnd) => close_docked_devtools(HWND(hwnd as _)),
                         None => {
                             if let Some(view) = &tab.view {
+                                arm_devtools_watch();
                                 view.open_devtools();
+                                opened = Some(tab.id);
                                 let proxy = self.proxy.clone();
                                 std::thread::spawn(move || {
                                     for _ in 0..100 {
@@ -1102,14 +1341,11 @@ impl Browser {
                         }
                     }
                 }
+                self.devtools_wanted = opened.map(|id| (id, 0, Instant::now()));
+                self.sync_devtools_header();
                 self.layout();
             }
-            "task_manager" => {
-                if let Some(view) = self.active_view() {
-                    // SAFETY: COM call on the UI thread that owns this web view.
-                    let _ = view.webview().cast::<ICoreWebView2_6>().map(|w| unsafe { w.OpenTaskManagerWindow() });
-                }
-            }
+            "task_manager" => self.open_panel("tasks"),
             "bookmarks" | "history" | "downloads" | "settings" => self.open_panel(name),
             _ => {}
         }
@@ -1194,6 +1430,7 @@ impl Browser {
         }
         let adblock = self.adblock;
         let keys = self.proxy.clone();
+        let watch = self.proxy.clone();
         let fullscreen = self.proxy.clone();
         builder
             .with_ipc_handler(move |req| {
@@ -1224,9 +1461,11 @@ impl Browser {
             .build_as_child(&self.window)
             .inspect(|view| {
                 native_keys(view, id, keys);
+                watch_devtools_windows(view, watch);
                 report_fullscreen(view, id, fullscreen);
                 if adblock {
                     block_requests(view, request_guard);
+                    early_scriptlets(view);
                 }
             })
     }
@@ -1249,6 +1488,7 @@ impl Browser {
             guard: Guard::new(),
             view: None,
             devtools: None,
+            zoom: 1.0,
         });
         self.select(id);
     }
@@ -1260,6 +1500,8 @@ impl Browser {
         self.music = None;
         self.menu = None;
         self.shield = None;
+        self.bookmark_dialog = None;
+        self.zoom_popup = None;
         let previous = self.active;
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == previous) {
             tab.last_seen = std::time::Instant::now();
@@ -1267,7 +1509,10 @@ impl Browser {
         if self.tabs[index].view.is_none() {
             let url = self.tabs[index].url.clone();
             match self.build_view(id, &url, self.tabs[index].private, self.tabs[index].guard.clone()) {
-                Ok(view) => self.tabs[index].view = Some(view),
+                Ok(view) => {
+                    set_view_zoom(&view, self.tabs[index].zoom);
+                    self.tabs[index].view = Some(view);
+                }
                 Err(e) => {
                     show_error(&format!("Could not open this tab: {e}"));
                     return;
@@ -1349,6 +1594,12 @@ impl Browser {
         if let Some(shield) = &self.shield {
             shield.place(&self.window, self.shield_bounds());
         }
+        if let Some(dialog) = &self.bookmark_dialog {
+            dialog.place(&self.window, self.bookmark_bounds());
+        }
+        if let Some(popup) = &self.zoom_popup {
+            popup.place(&self.window, self.zoom_bounds());
+        }
     }
 
     // Beside the page for the selected tab, hidden for the others. Chromium paints its own title bar and buttons, so
@@ -1357,7 +1608,8 @@ impl Browser {
         let Some(host) = self.devtools_host else { return };
         let scale = self.window.scale_factor();
         let size = self.window.inner_size();
-        let top = (self.bounds(true).size.to_logical::<f64>(scale).height * scale) as i32;
+        let bar = self.bounds(true).size.to_logical::<f64>(scale).height;
+        let top = (bar * scale) as i32;
         let width = (size.width as f64 * self.devtools_share) as i32;
         let height = size.height as i32 - top;
         let (left, over, right, under) = self.devtools_frame;
@@ -1375,8 +1627,17 @@ impl Browser {
                 }
             }
         }
+        if let Some(strip) = &self.devtools_header {
+            let _ = strip.set_visible(shown);
+            let logical = size.to_logical::<f64>(scale);
+            let _ = strip.set_bounds(Rect { position: LogicalPosition::new(logical.width - DEVTOOLS_CLOSE, bar).into(), size: ViewSize::new(DEVTOOLS_CLOSE, DEVTOOLS_CLOSE).into() });
+        }
         // SAFETY: as above, for a window this thread made.
         let _ = unsafe { SetWindowPos(HWND(host as _), Some(HWND_TOP), size.width as i32 - width, top, width, height, SWP_NOACTIVATE | if shown { SWP_SHOWWINDOW } else { SWP_HIDEWINDOW }) };
+        if let Some(strip) = &self.devtools_header {
+            // SAFETY: a window this thread made. Above the DevTools host, or it could not be seen or clicked.
+            let _ = unsafe { SetWindowPos(strip.hwnd(), Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) };
+        }
     }
 
     fn on_divider(&self, x: f64, y: f64) -> bool {
@@ -1420,7 +1681,38 @@ impl Browser {
 
     // WebView2 can only open DevTools as its own window, so that window is moved inside this one as soon as it appears.
     // shortcut: goes by the engine process and the address in the title, so two windows showing one address could swap. Upgrade if WebView2 gains docking.
+    // The engine sometimes drops a DevTools window just as it appears, so one that was asked for is asked for again.
+    fn keep_wanted_devtools(&mut self) {
+        let Some((id, retries, since)) = self.devtools_wanted else { return };
+        let Some(tab) = self.tabs.iter().find(|t| t.id == id) else {
+            self.devtools_wanted = None;
+            return;
+        };
+        if tab.devtools.is_some() {
+            if since.elapsed().as_secs() >= DEVTOOLS_SETTLE_SECS {
+                self.devtools_wanted = None;
+            }
+            return;
+        }
+        let (seen, alive) = DEVTOOLS_WATCH.with(|w| {
+            let watch = w.borrow();
+            // SAFETY: IsWindow accepts any value.
+            (watch.seen, watch.hidden.is_some_and(|(hwnd, _)| unsafe { IsWindow(Some(HWND(hwnd as _))) }.as_bool()))
+        });
+        if !seen || alive {
+            return;
+        }
+        if retries >= DEVTOOLS_RETRIES {
+            self.devtools_wanted = None;
+        } else if let Some(view) = &tab.view {
+            arm_devtools_watch();
+            view.open_devtools();
+            self.devtools_wanted = Some((id, retries + 1, Instant::now()));
+        }
+    }
+
     fn scan_devtools(&mut self) {
+        restore_lost_devtools();
         let mut changed = false;
         for tab in &mut self.tabs {
             // SAFETY: IsWindow accepts any value. This also catches DevTools closing itself.
@@ -1455,6 +1747,12 @@ impl Browser {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == self.active) {
                     tab.devtools = Some(found.0 as isize);
                 }
+                set_see_through(found, false);
+                DEVTOOLS_WATCH.with(|w| {
+                    let mut watch = w.borrow_mut();
+                    watch.armed_until = None;
+                    watch.hidden = None;
+                });
                 changed = true;
             }
         }
@@ -1467,7 +1765,30 @@ impl Browser {
             }
         }
         if changed {
+            self.sync_devtools_header();
             self.layout();
+        }
+        self.keep_wanted_devtools();
+    }
+
+    // Only exists while DevTools does, so it costs nothing the rest of the time.
+    fn sync_devtools_header(&mut self) {
+        let any = self.tabs.iter().any(|t| t.devtools.is_some());
+        if !any {
+            self.devtools_header = None;
+        } else if self.devtools_header.is_none() {
+            let proxy = self.proxy.clone();
+            let dark = self.settings["theme"] == "dark" || self.private_window;
+            let html = DEVTOOLS_HTML.replace("<!--ICONS-->", ICONS_HTML).replace("__CLASS__", if dark { "dark" } else if self.settings["theme"] == "light" { "light" } else { "" });
+            self.devtools_header = WebViewBuilder::new_with_web_context(&mut self.context)
+                .with_additional_browser_args(self.args.clone())
+                .with_focused(false)
+                .with_html(html)
+                .with_drag_drop_handler(|_| true)
+                .with_navigation_handler(is_built_in_page)
+                .with_ipc_handler(move |req| drop(proxy.send_event(Msg::Toolbar(req.body().clone()))))
+                .build_as_child(&self.window)
+                .ok();
         }
     }
 
@@ -1493,6 +1814,8 @@ impl Browser {
             "loading": active.is_some_and(|t| t.loading),
             "maximized": self.window.is_maximized(),
             "private": active.is_some_and(|t| t.private),
+            "zoom": active.map_or(100, |t| (t.zoom * 100.0).round() as u32),
+            "downloading": self.tabs.iter().map(|t| t.downloads).sum::<u32>(),
             "bookmarked": active.is_some_and(|t| self.bookmarks.iter().any(|b| b["url"] == t.url.as_str())),
             "bar": self.show_bookmarks_bar(),
             "bookmarks": if self.show_bookmarks_bar() { json!(self.bookmarks) } else { json!([]) },
@@ -1526,6 +1849,10 @@ impl Browser {
                 let excess = self.downloads.len().saturating_sub(DOWNLOADS_KEPT);
                 self.downloads.drain(..excess);
                 self.save_downloads();
+                self.sync_toolbar();
+                if let (true, true, Some(entry)) = (self.settings["download_show"] == true, self.panel.is_none() && !self.fullscreen, self.downloads.last().cloned()) {
+                    self.show_download_bubble(target, entry);
+                }
             }
             Msg::DownloadDone(id, url, path, ok) => {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
@@ -1540,6 +1867,7 @@ impl Browser {
                     }
                 }
                 self.save_downloads();
+                self.sync_toolbar();
                 let finished = self.downloads.iter().rev().find(|d| d["url"] == url.as_str()).cloned();
                 if let (true, true, Some(entry)) = (self.settings["download_show"] == true, self.panel.is_none() && !self.fullscreen, finished) {
                     self.show_download_bubble(target, entry);
@@ -1558,6 +1886,20 @@ impl Browser {
                     self.render_panel();
                 }
             }
+            Msg::UpdateChecked(found) => {
+                self.update_status = match &found {
+                    Some(None) => "current",
+                    Some(Some(_)) => "",
+                    None => "failed",
+                };
+                if let Some(Some(version)) = found {
+                    self.update_ready = Some(version);
+                }
+                if self.panel_page == "settings" {
+                    self.render_panel();
+                }
+            }
+            Msg::Processes(list) => self.render_processes(list),
             Msg::Fullscreen(id, on) => {
                 if id == self.active {
                     self.set_fullscreen(on);
@@ -1607,6 +1949,10 @@ impl Browser {
             }
             Msg::Key(id, name) => {
                 if id == self.active {
+                    if let Some(how) = name.strip_prefix("zoom_") {
+                        self.zoom_by_key(how, target);
+                        return false;
+                    }
                     return self.shortcut(name);
                 }
             }
@@ -1662,6 +2008,10 @@ impl Browser {
     }
 
     fn toolbar_command(&mut self, raw: &str, target: &EventLoopWindowTarget<Msg>) -> bool {
+        if let Some(how) = raw.strip_prefix("zoom_") {
+            self.zoom_by_key(how, target);
+            return false;
+        }
         let Ok(command) = serde_json::from_str::<Value>(raw) else { return self.shortcut(raw) };
         let id = command["id"].as_u64();
         let script = match command["cmd"].as_str().unwrap_or("") {
@@ -1771,12 +2121,79 @@ impl Browser {
                 }
                 return false;
             }
+            "zoom" => {
+                self.change_zoom(command["value"].as_str().unwrap_or(""));
+                return false;
+            }
+            "zoom_toggle" => {
+                if self.zoom_popup.take().is_none() {
+                    self.zoom_popup = self.build_popup(target, ZOOM_HTML, "Riffle zoom", self.zoom_bounds(), false);
+                }
+                return false;
+            }
+            "zoom_ready" => {
+                self.render_zoom();
+                return false;
+            }
+            "zoom_close" => {
+                self.zoom_popup = None;
+                return false;
+            }
             "menu_pick" => {
                 self.pick_menu_item(command["value"].as_str().unwrap_or(""));
                 return false;
             }
             "bookmark" => {
-                self.toggle_bookmark();
+                if self.bookmark_dialog.is_none() && self.bookmark_closed.elapsed().as_millis() >= 300 {
+                    self.toggle_bookmark();
+                }
+                return false;
+            }
+            "bookmark_dialog" => {
+                if self.bookmark_dialog.is_none() {
+                    self.bookmark_dialog = self.build_popup(target, BOOKMARK_HTML, "Riffle bookmark", self.bookmark_bounds(), true);
+                }
+                return false;
+            }
+            "bookmark_size" => {
+                self.bookmark_height = command["value"].as_f64().unwrap_or(220.0).clamp(120.0, 340.0);
+                if let Some(dialog) = &self.bookmark_dialog {
+                    dialog.place(&self.window, self.bookmark_bounds());
+                }
+                return false;
+            }
+            "bookmark_ready" => {
+                let title = self.bookmarks.iter().find(|b| b["url"] == self.bookmark_url.as_str()).map(|b| b["title"].clone());
+                let state = json!({"title": title, "url": self.bookmark_url, "added": self.bookmark_added, "theme": self.settings["theme"], "private": self.private_window});
+                if let Some(dialog) = &self.bookmark_dialog {
+                    let _ = dialog.evaluate_script(&format!("render({state})"));
+                }
+                return false;
+            }
+            "bookmark_save" | "bookmark_remove" | "bookmark_close" => {
+                self.reload_bookmarks();
+                let url = self.bookmark_url.clone();
+                if command["cmd"] == "bookmark_remove" {
+                    self.bookmarks.retain(|b| b["url"] != url.as_str());
+                } else if command["cmd"] == "bookmark_save" {
+                    // A click elsewhere saves what it can. Done on a bad address stays open to say so.
+                    let new_url = web_address(command["url"].as_str().unwrap_or(""));
+                    if new_url.is_none() && command["strict"] == true {
+                        if let Some(dialog) = &self.bookmark_dialog {
+                            let _ = dialog.evaluate_script("badLink()");
+                        }
+                        return false;
+                    }
+                    edit_bookmark(&mut self.bookmarks, &url, command["value"].as_str().unwrap_or(""), new_url.as_deref());
+                }
+                self.save_bookmarks();
+                self.bookmark_dialog = None;
+                self.bookmark_closed = std::time::Instant::now();
+                self.layout();
+                self.sync_toolbar();
+                if let Some(view) = self.active_view() {
+                    let _ = view.focus();
+                }
                 return false;
             }
             "music" => {
@@ -1956,6 +2373,31 @@ impl Browser {
                 let _ = self.window.drag_window();
                 return false;
             }
+            "check_updates" => {
+                if let Some(dir) = install_dir().filter(|_| is_installed() && self.update_ready.is_none()) {
+                    self.update_status = "checking";
+                    self.render_panel();
+                    let proxy = self.proxy.clone();
+                    std::thread::spawn(move || drop(proxy.send_event(Msg::UpdateChecked(update_once(&dir)))));
+                }
+                return false;
+            }
+            "about_link" => {
+                let url = match command["link"].as_str().unwrap_or("") {
+                    "website" => "https://gagankarthik.github.io/riffle-browser/",
+                    "notes" => "https://github.com/gagankarthik/riffle-browser/releases",
+                    "source" => "https://github.com/gagankarthik/riffle-browser",
+                    "license" => "https://github.com/gagankarthik/riffle-browser/blob/main/LICENSE",
+                    _ => return false,
+                };
+                self.close_panel();
+                self.open_tab(url, false);
+                return false;
+            }
+            "tasks_refresh" => {
+                self.request_processes();
+                return false;
+            }
             "resize_top" => {
                 let _ = self.window.drag_resize_window(ResizeDirection::North);
                 return false;
@@ -2045,25 +2487,96 @@ fn address_to_url(input: &str, search: &str) -> Option<String> {
 /// Runs on its own thread, so startup never waits for a download or for parsing the lists.
 fn load_filters(data_dir: PathBuf, download: bool) {
     std::thread::spawn(move || {
-        let fetch = |file: &str, url: &str, valid: fn(&str) -> bool| {
+        let refresh = |file: &str, url: &str, valid: fn(&str) -> bool| {
             let path = data_dir.join(file);
             let age = std::fs::metadata(&path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
             if download && age.is_none_or(|a| a.as_secs() > FILTER_MAX_AGE_SECS) {
                 download_file(url, &path, valid); // on failure the older copy, if any, keeps working
             }
-            std::fs::read_to_string(path).ok()
         };
-        let lists: Vec<String> = FILTER_LISTS.iter().filter_map(|(file, url)| fetch(file, url, is_filter_list)).collect();
-        if lists.is_empty() {
-            return;
+        for (file, url) in FILTER_LISTS {
+            refresh(file, url, is_filter_list);
         }
-        let _ = POPUP_ENGINE.set(build_engine(vec![popup_rules(&lists)]));
-        let mut engine = build_engine(lists);
+        refresh(SCRIPTLETS.0, SCRIPTLETS.1, |t| t.starts_with('['));
+        let newest = FILTER_LISTS.iter().filter_map(|(file, _)| std::fs::metadata(data_dir.join(file)).and_then(|m| m.modified()).ok()).max();
+        let cached = cached_engine(&data_dir, "engine.dat", newest).zip(cached_engine(&data_dir, "popup.dat", newest));
+        let (mut engine, popups) = match cached {
+            Some(both) => both,
+            None => {
+                let lists: Vec<String> = FILTER_LISTS.iter().filter_map(|(file, _)| std::fs::read_to_string(data_dir.join(file)).ok()).collect();
+                if lists.is_empty() {
+                    return;
+                }
+                let popups = build_engine(vec![popup_rules(&lists)]);
+                let engine = build_engine(lists);
+                save_engine_cache(&data_dir, &engine, &popups);
+                (engine, popups)
+            }
+        };
+        let _ = POPUP_ENGINE.set(popups);
         // A missing or unreadable file only means no scriptlets: blocking itself still works.
-        let scripts = fetch(SCRIPTLETS.0, SCRIPTLETS.1, |t| t.starts_with('[')).and_then(|t| serde_json::from_str::<Vec<adblock::resources::Resource>>(&t).ok());
-        engine.use_resources(scripts.unwrap_or_default());
+        let scripts = std::fs::read_to_string(data_dir.join(SCRIPTLETS.0)).ok().and_then(|t| serde_json::from_str::<Vec<adblock::resources::Resource>>(&t).ok());
+        engine.use_resources(built_in_resources().into_iter().chain(scripts.unwrap_or_default()));
         let _ = ENGINE.set(engine);
     });
+}
+
+/// The page scripts and harmless stand-ins that filter rules ask for by name. Built in, so they can never be missing.
+fn built_in_resources() -> Vec<adblock::resources::Resource> {
+    use adblock::resources::{MimeType, Resource, ResourceType};
+    let resource = |names: &[&str], kind: ResourceType, body: &[u8]| Resource {
+        name: names[0].to_string(),
+        aliases: names[1..].iter().map(|n| n.to_string()).collect(),
+        kind,
+        content: base64(body),
+        dependencies: Vec::new(),
+        permission: Default::default(),
+    };
+    let text = SCRIPTLETS_JS.replace("\r\n", "\n");
+    let mut sections = text.split("\n/// ");
+    sections.next(); // the explanation at the top
+    let prelude = sections.next().and_then(|s| s.split_once('\n')).map_or("", |s| s.1);
+    let mut out: Vec<Resource> = sections
+        .filter_map(|section| section.split_once('\n'))
+        .map(|(names, body)| {
+            let names: Vec<&str> = names.split_whitespace().collect();
+            resource(&names, ResourceType::Template, format!("(()=>{{{prelude}\n{body}\n}})();").as_bytes())
+        })
+        .collect();
+    let gif = decode_base64("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7").unwrap_or_default();
+    let (js, none) = (MimeType::ApplicationJavascript, MimeType::TextPlain);
+    out.push(resource(&["noop.js", "noopjs"], ResourceType::Mime(js.clone()), b"(function(){})();"));
+    out.push(resource(&["noop.txt", "nooptext"], ResourceType::Mime(none), b""));
+    out.push(resource(&["noop.json", "noopjson"], ResourceType::Mime(MimeType::ApplicationJson), b"{}"));
+    out.push(resource(&["1x1.gif", "1x1-transparent.gif"], ResourceType::Mime(MimeType::ImageGif), &gif));
+    out.push(resource(&["googlesyndication_adsbygoogle.js", "googlesyndication.com/adsbygoogle.js"], ResourceType::Mime(js), b"window.adsbygoogle={loaded:true,push(){}};"));
+    out
+}
+
+/// The compiled rules from last time, which load far faster than parsing every list, and use less memory doing it.
+/// Only if nothing has changed since: a newer list or a new Riffle version means parsing again.
+fn cached_engine(dir: &Path, file: &str, newest_list: Option<std::time::SystemTime>) -> Option<Engine> {
+    if std::fs::read_to_string(dir.join("engine.version")).ok()? != env!("CARGO_PKG_VERSION") {
+        return None;
+    }
+    let path = dir.join(file);
+    if std::fs::metadata(&path).and_then(|m| m.modified()).ok()? < newest_list? {
+        return None;
+    }
+    let mut engine = build_engine(Vec::new());
+    engine.deserialize(&std::fs::read(path).ok()?).ok()?; // a damaged file is rejected, and the lists are parsed instead
+    Some(engine)
+}
+
+fn save_engine_cache(dir: &Path, engine: &Engine, popups: &Engine) {
+    for (file, data) in [("engine.dat", engine.serialize()), ("popup.dat", popups.serialize())] {
+        let temp = dir.join(format!("{file}.{}", std::process::id()));
+        if std::fs::write(&temp, data).is_err() || std::fs::rename(&temp, dir.join(file)).is_err() {
+            let _ = std::fs::remove_file(temp);
+            return;
+        }
+    }
+    let _ = std::fs::write(dir.join("engine.version"), env!("CARGO_PKG_VERSION"));
 }
 
 /// The $popup rules from every list, with that option removed so the engine accepts them.
@@ -2220,6 +2733,96 @@ fn resource_kind(context: COREWEBVIEW2_WEB_RESOURCE_CONTEXT) -> &'static str {
     }
 }
 
+/// What this site's rules want done to the page, safe to run more than once.
+fn early_script(engine: &Engine, url: &str) -> String {
+    let found = engine.url_cosmetic_resources(url);
+    if found.hide_selectors.is_empty() && found.procedural_actions.is_empty() && found.injected_script.is_empty() {
+        return String::new();
+    }
+    let css: String = found.hide_selectors.iter().map(|s| format!("{s}{{display:none!important}}\n")).collect();
+    let rules: Vec<Value> = found.procedural_actions.iter().filter_map(|r| serde_json::from_str(r).ok()).collect();
+    let procedural = if rules.is_empty() { String::new() } else { format!("{PROCEDURAL_SCRIPT}({});", Value::Array(rules)) };
+    format!(
+        "if(window===top&&!window.__riffleRules){{window.__riffleRules=document.scripts.length+1;
+(c=>{{const a=()=>{{if(!document.documentElement)return new MutationObserver((_,o)=>{{if(document.documentElement){{o.disconnect();a()}}}}).observe(document,{{childList:true}});const s=document.createElement('style');s.textContent=c;document.documentElement.appendChild(s)}};if(c)a()}})({});
+{procedural}
+try{{{}}}catch(e){{}}
+}}",
+        json!(css),
+        found.injected_script
+    )
+}
+
+// Registered as navigation starts, so the page's own scripts, including anti-adblock checks, run after these.
+fn early_scriptlets(view: &WebView) {
+    let current: Rc<RefCell<Option<String>>> = Rc::default();
+    // SAFETY: COM calls on the UI thread that owns this web view; strings outlive the calls that read them.
+    unsafe {
+        let handler = NavigationStartingEventHandler::create(Box::new(move |sender, args| {
+            let (Some(sender), Some(args)) = (sender, args) else { return Ok(()) };
+            if let Some(old) = current.borrow_mut().take() {
+                sender.RemoveScriptToExecuteOnDocumentCreated(&windows::core::HSTRING::from(old))?;
+            }
+            let Some(engine) = ENGINE.get() else { return Ok(()) };
+            let mut raw = PWSTR::null();
+            args.Uri(&mut raw)?;
+            let url = take_pwstr(raw);
+            if !is_web(&url) || site_is_allowed(&url) {
+                return Ok(());
+            }
+            let script = early_script(engine, &url);
+            if !script.is_empty() {
+                let keep = current.clone();
+                let done = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(move |_, id| {
+                    *keep.borrow_mut() = Some(id);
+                    Ok(())
+                }));
+                sender.AddScriptToExecuteOnDocumentCreated(&windows::core::HSTRING::from(script), &done)?;
+            }
+            Ok(())
+        }));
+        let mut token = Default::default();
+        let _ = view.webview().add_NavigationStarting(&handler, &mut token);
+    }
+}
+
+/// What to do with a request: None lets it through, Some(None) blocks it, Some(Some(data)) answers with a harmless stand-in.
+// The small seed list is only for before the full lists load: after that it must not override their exceptions.
+fn request_verdict(url: &str, source: &str, kind: &str) -> Option<Option<String>> {
+    let engine = ENGINE.get().or(SEED_ENGINE.get())?;
+    let request = adblock::request::Request::new(url, source, kind, "GET").ok()?;
+    let result = engine.check_network_request(&request);
+    result.should_block().then_some(result.redirect)
+}
+
+/// A stand-in's bytes and type, from the data address the engine gives.
+fn parse_stand_in(data: &str) -> Option<(String, Vec<u8>)> {
+    let (kind, body) = data.strip_prefix("data:")?.split_once(";base64,")?;
+    Some((kind.to_string(), decode_base64(body)?))
+}
+
+fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let (mut bits, mut count) = (0u32, 0);
+    for byte in text.bytes().filter(|b| *b != b'=') {
+        let value = match byte {
+            b'A'..=b'Z' => byte - b'A',
+            b'a'..=b'z' => byte - b'a' + 26,
+            b'0'..=b'9' => byte - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        };
+        bits = bits << 6 | value as u32;
+        count += 6;
+        if count >= 8 {
+            count -= 8;
+            out.push((bits >> count) as u8);
+        }
+    }
+    Some(out)
+}
+
 // Every request from the page passes through here. A blocked one gets an empty 403 and never reaches the network.
 fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>) {
     let webview = view.webview();
@@ -2248,9 +2851,20 @@ fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>) {
             let mut raw = PWSTR::null();
             sender.Source(&mut raw)?;
             let source = take_pwstr(raw);
-            if !site_is_allowed(&source) && [SEED_ENGINE.get(), ENGINE.get()].into_iter().flatten().any(|e| is_blocked(e, &url, &source, resource_kind(context))) {
+            if site_is_allowed(&source) {
+                return Ok(());
+            }
+            if let Some(stand_in) = request_verdict(&url, &source, resource_kind(context)) {
                 guard.borrow_mut().blocked += 1;
-                let response = environment.CreateWebResourceResponse(None::<&windows::Win32::System::Com::IStream>, 403, w!("Blocked"), PCWSTR::null())?;
+                // A site that checks its ad script loaded gets a harmless copy, so it neither breaks nor accuses the visitor.
+                let response = match stand_in.as_deref().and_then(parse_stand_in) {
+                    Some((kind, body)) => {
+                        let stream = SHCreateMemStream(Some(&body));
+                        let headers = windows::core::HSTRING::from(format!("Content-Type: {kind}\nAccess-Control-Allow-Origin: *"));
+                        environment.CreateWebResourceResponse(stream.as_ref(), 200, w!("OK"), &headers)?
+                    }
+                    None => environment.CreateWebResourceResponse(None::<&windows::Win32::System::Com::IStream>, 403, w!("Blocked"), PCWSTR::null())?,
+                };
                 args.SetResponse(&response)?;
             }
             Ok(())
@@ -2260,6 +2874,13 @@ fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>) {
 }
 
 fn key_shortcut(key: u32, shift: bool) -> Option<&'static str> {
+    // The plus and minus keys, on the main row and the number pad. Shift is how some keyboards reach plus.
+    match key {
+        0xBB | 0x6B => return Some("zoom_in"),
+        0xBD | 0x6D => return Some("zoom_out"),
+        0x30 | 0x60 if !shift => return Some("zoom_reset"),
+        _ => {}
+    }
     Some(match (key as u8 as char, shift) {
         ('T', false) => "new_tab",
         ('T', true) => "reopen_tab",
@@ -2330,6 +2951,35 @@ fn report_fullscreen(view: &WebView, id: u64, proxy: EventLoopProxy<Msg>) {
     }
 }
 
+/// Memory only this process holds, the figure Windows Task Manager shows by default.
+fn process_memory(pid: u32) -> usize {
+    // SAFETY: Windows checks the id and the handle, and the counters are a local value of the size given.
+    unsafe {
+        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else { return 0 };
+        let mut counters = PROCESS_MEMORY_COUNTERS_EX::default();
+        let size = std::mem::size_of::<PROCESS_MEMORY_COUNTERS_EX>() as u32;
+        let ok = K32GetProcessMemoryInfo(handle, &mut counters as *mut _ as *mut PROCESS_MEMORY_COUNTERS, size).as_bool();
+        let _ = CloseHandle(handle);
+        if ok { counters.PrivateUsage } else { 0 }
+    }
+}
+
+/// The next step up or down from any level, staying within what the engine supports.
+fn next_zoom(current: f64, how: &str) -> f64 {
+    let (first, last) = (ZOOM_LEVELS[0], ZOOM_LEVELS[ZOOM_LEVELS.len() - 1]);
+    match how {
+        "in" => ZOOM_LEVELS.iter().copied().find(|z| *z > current + 0.001).unwrap_or(last),
+        "out" => ZOOM_LEVELS.iter().rev().copied().find(|z| *z < current - 0.001).unwrap_or(first),
+        "reset" => 1.0,
+        _ => current,
+    }
+}
+
+fn set_view_zoom(view: &WebView, zoom: f64) {
+    // SAFETY: a COM call on the UI thread that owns this web view.
+    let _ = unsafe { view.controller().SetZoomFactor(zoom) };
+}
+
 /// Tabs playing audio through any route, including players the page script cannot see.
 fn plays_audio(view: &WebView) -> bool {
     let mut playing = BOOL(0);
@@ -2367,6 +3017,118 @@ fn measure_devtools_frame(hwnd: isize) -> Option<(i32, i32, i32, i32)> {
         GetWindowRect(inner, &mut content).ok()?;
     }
     Some(frame_around(window, content))
+}
+
+#[derive(Default)]
+struct DevtoolsWatch {
+    process: u32,
+    proxy: Option<EventLoopProxy<Msg>>,
+    armed_until: Option<Instant>,
+    hidden: Option<(isize, Instant)>,
+    seen: bool, // the window asked for has appeared
+}
+
+fn arm_devtools_watch() {
+    DEVTOOLS_WATCH.with(|w| {
+        let mut watch = w.borrow_mut();
+        watch.armed_until = Some(Instant::now() + Duration::from_secs(DEVTOOLS_ARMED_SECS));
+        watch.hidden = None;
+        watch.seen = false;
+    });
+}
+
+thread_local! {
+    static DEVTOOLS_WATCH: RefCell<DevtoolsWatch> = RefCell::default();
+}
+
+// WebView2 can only open DevTools as its own window. Windows reports it here the moment it shows, so it turns
+// fully transparent before it is seen, and is docked as soon as the next scan runs. Not moved off screen: the
+// engine stops painting a window it thinks nobody can see, and DevTools then stays blank after docking.
+unsafe extern "system" fn engine_window_shown(_: HWINEVENTHOOK, event: u32, hwnd: HWND, object: i32, child: i32, _: u32, _: u32) {
+    if object != OBJID_WINDOW.0 || child != CHILDID_SELF as i32 {
+        return;
+    }
+    let mut text = [0u16; 64];
+    // SAFETY: plain queries on a window handle that Windows checks, writing into local values.
+    let (top_level, title) = unsafe {
+        let top_level = GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD.0 as isize == 0 && IsWindowVisible(hwnd).as_bool();
+        let length = GetWindowTextW(hwnd, &mut text);
+        (top_level, String::from_utf16_lossy(&text[..length.max(0) as usize]))
+    };
+    if !top_level {
+        return;
+    }
+    DEVTOOLS_WATCH.with(|w| {
+        let mut watch = w.borrow_mut();
+        let armed = event == EVENT_OBJECT_SHOW && title.is_empty() && watch.armed_until.is_some_and(|until| Instant::now() < until);
+        if !armed && !title.starts_with("DevTools") {
+            return;
+        }
+        set_see_through(hwnd, true);
+        watch.hidden = Some((hwnd.0 as isize, Instant::now()));
+        watch.seen = true;
+        if let Some(proxy) = &watch.proxy {
+            drop(proxy.send_event(Msg::DevtoolsScan));
+        }
+    });
+}
+
+/// Undoes the docking first, unseen. Closing it while still a child of Riffle's window could make the engine
+/// drop the next DevTools window it opens.
+fn close_docked_devtools(hwnd: HWND) {
+    set_see_through(hwnd, true);
+    // SAFETY: Windows checks the handle, and only asks the window to close. A window gone by now just makes these fail.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) & !(WS_CHILD.0 as isize);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_POPUP.0 as isize);
+        let _ = SetParent(hwnd, None);
+        let _ = PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+    }
+}
+
+fn set_see_through(hwnd: HWND, on: bool) {
+    // SAFETY: Windows checks the handle, and a window gone by now just makes these fail.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if on {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
+            let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 0, LWA_ALPHA);
+        } else if style & WS_EX_LAYERED.0 as isize != 0 {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize));
+        }
+    }
+}
+
+fn watch_devtools_windows(view: &WebView, proxy: EventLoopProxy<Msg>) {
+    let mut process = 0;
+    // SAFETY: a COM call on the UI thread writing into a local value.
+    let _ = unsafe { view.webview().BrowserProcessId(&mut process) };
+    DEVTOOLS_WATCH.with(|w| {
+        let mut watch = w.borrow_mut();
+        if process == 0 || watch.process == process {
+            return;
+        }
+        watch.process = process;
+        watch.proxy = Some(proxy);
+        // SAFETY: the callback is a plain function that lives as long as the program, and these hooks do too.
+        unsafe {
+            for event in [EVENT_OBJECT_SHOW, EVENT_OBJECT_NAMECHANGE] {
+                SetWinEventHook(event, event, None, Some(engine_window_shown), process, 0, WINEVENT_OUTOFCONTEXT);
+            }
+        }
+    });
+}
+
+/// If something hidden never got docked, such as an address that does not match its title, it returns where it can be used.
+fn restore_lost_devtools() {
+    DEVTOOLS_WATCH.with(|w| {
+        let mut watch = w.borrow_mut();
+        let Some((hwnd, at)) = watch.hidden else { return };
+        if at.elapsed().as_secs() >= DEVTOOLS_HIDE_SECS {
+            watch.hidden = None;
+            set_see_through(HWND(hwnd as _), false);
+        }
+    });
 }
 
 /// A visible top-level DevTools window of this engine process and this tab's address, not yet docked.
@@ -2422,6 +3184,24 @@ fn web_address(input: &str) -> Option<String> {
 }
 
 /// Adds a bookmark, or changes the one at `old`. An address already bookmarked is replaced, never doubled.
+/// Changes the name and link, keeping the icon while the site stays the same. A blank name keeps the old one.
+fn edit_bookmark(bookmarks: &mut Vec<Value>, url: &str, title: &str, new_url: Option<&str>) {
+    let Some(at) = bookmarks.iter().position(|b| b["url"] == url) else { return };
+    if !title.trim().is_empty() {
+        bookmarks[at]["title"] = json!(title.trim());
+    }
+    let Some(new_url) = new_url.filter(|n| *n != url) else { return };
+    if !same_site(url, new_url) {
+        bookmarks[at]["icon"] = Value::Null;
+    }
+    bookmarks[at]["url"] = json!(new_url);
+    let mut index = 0;
+    bookmarks.retain(|b| {
+        index += 1;
+        index - 1 == at || b["url"] != new_url // an older bookmark of that address gives way
+    });
+}
+
 fn put_bookmark(bookmarks: &mut Vec<Value>, old: Option<&str>, title: &str, url: &str) {
     let title = if title.trim().is_empty() { url } else { title.trim() };
     let entry = json!({"url": url, "title": title});
@@ -2527,13 +3307,13 @@ fn install_script(exe: &str, dir: &str, link: &str, desktop: Option<&str>, pin_s
     let open = ps_quote(&format!("\"{exe}\" \"%1\""));
     let launch = ps_quote(&format!("\"{exe}\""));
     let version = env!("CARGO_PKG_VERSION");
-    let desktop_part = desktop.map_or(String::new(), |d| format!("$s=(New-Object -ComObject WScript.Shell).CreateShortcut({}); $s.TargetPath={q_exe}; $s.Description='Riffle - fast, ad-free web browser'; $s.Save()\n", ps_quote(d)));
+    let desktop_part = desktop.map_or(String::new(), |d| format!("$s=(New-Object -ComObject WScript.Shell).CreateShortcut({}); $s.TargetPath={q_exe}; $s.Description='Riffle - lightweight web browser with ad blocking'; $s.Save()\n", ps_quote(d)));
     // Best effort: Windows may refuse, and Riffle is still in the Start menu's list of apps.
     let start_part = if pin_start { format!("try {{ (New-Object -ComObject Shell.Application).Namespace((Split-Path {q_link})).ParseName((Split-Path {q_link} -Leaf)).InvokeVerb('startpin') }} catch {{}}\n") } else { String::new() };
     format!(
         "$ErrorActionPreference='Stop'
 New-Item -ItemType Directory -Force (Split-Path {q_link}) | Out-Null
-$s=(New-Object -ComObject WScript.Shell).CreateShortcut({q_link}); $s.TargetPath={q_exe}; $s.Description='Riffle - fast, ad-free web browser'; $s.Save()
+$s=(New-Object -ComObject WScript.Shell).CreateShortcut({q_link}); $s.TargetPath={q_exe}; $s.Description='Riffle - lightweight web browser with ad blocking'; $s.Save()
 {desktop_part}New-Item '{UNINSTALL_KEY}' -Force | Out-Null
 $v=@{{DisplayName='Riffle';DisplayIcon={q_exe};DisplayVersion='{version}';Publisher='Riffle';InstallLocation={q_dir};UninstallString={uninstall};QuietUninstallString={quiet}}}
 foreach($k in $v.Keys){{New-ItemProperty '{UNINSTALL_KEY}' -Name $k -Value $v[$k] -PropertyType String -Force | Out-Null}}
@@ -2547,7 +3327,7 @@ Put '{CLIENT_KEY}' 'Riffle'
 Put '{CLIENT_KEY}\\DefaultIcon' {q_exe}
 Put '{CLIENT_KEY}\\shell\\open\\command' {launch}
 Put '{CLIENT_KEY}\\Capabilities' $null
-foreach($k in @{{ApplicationName='Riffle';ApplicationDescription='Fast, ad-free web browser';ApplicationIcon={q_exe}}}.GetEnumerator()){{New-ItemProperty '{CLIENT_KEY}\\Capabilities' -Name $k.Key -Value $k.Value -PropertyType String -Force | Out-Null}}
+foreach($k in @{{ApplicationName='Riffle';ApplicationDescription='Lightweight web browser with ad blocking';ApplicationIcon={q_exe}}}.GetEnumerator()){{New-ItemProperty '{CLIENT_KEY}\\Capabilities' -Name $k.Key -Value $k.Value -PropertyType String -Force | Out-Null}}
 Put '{CLIENT_KEY}\\Capabilities\\URLAssociations' $null
 foreach($k in 'http','https'){{New-ItemProperty '{CLIENT_KEY}\\Capabilities\\URLAssociations' -Name $k -Value 'RiffleHTML' -PropertyType String -Force | Out-Null}}
 if(-not(Test-Path 'HKCU:\\Software\\RegisteredApplications')){{New-Item 'HKCU:\\Software\\RegisteredApplications' | Out-Null}}
@@ -2637,14 +3417,20 @@ fn swap_in_update(dir: &Path) -> std::io::Result<()> {
     std::fs::hard_link(&exe, &uninstaller).or_else(|_| std::fs::copy(&exe, &uninstaller).map(drop))
 }
 
-/// Checks GitHub once and installs anything newer, returning its version.
-fn update_once(dir: &Path) -> Option<String> {
+/// Checks GitHub once and installs anything newer. None if the check failed, Some(None) if already current,
+/// and Some(Some(version)) if that version now starts next time.
+fn update_once(dir: &Path) -> Option<Option<String>> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    static BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if BUSY.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return None; // the daily check and the Settings button must not download over each other
+    }
+    let found = (|| {
     let release: Value = serde_json::from_str(&fetch_text(LATEST_RELEASE)?).ok()?;
     let tag = release["tag_name"].as_str()?;
     // Numbers only from here on, so the tag is safe inside an address.
     if !is_newer(tag, env!("CARGO_PKG_VERSION")) {
-        return None;
+        return Some(None);
     }
     let expected = listed_hash(&fetch_text(&format!("{RELEASES}/{tag}/SHA256SUMS.txt"))?, "RiffleSetup.exe")?;
     let new = dir.join("riffle-browser.new");
@@ -2655,7 +3441,10 @@ fn update_once(dir: &Path) -> Option<String> {
     }
     let version = tag.trim_start_matches('v').to_string();
     let _ = std::process::Command::new(system32("reg.exe")).args(["add", &UNINSTALL_KEY.replace("HKCU:", "HKCU"), "/v", "DisplayVersion", "/d", &version, "/f"]).creation_flags(CREATE_NO_WINDOW).status();
-    Some(version)
+    Some(Some(version))
+    })();
+    BUSY.store(false, std::sync::atomic::Ordering::SeqCst);
+    found
 }
 
 /// Only the installed copy updates itself: a copy someone built or carried elsewhere is theirs to manage.
@@ -2671,7 +3460,7 @@ fn keep_updated(data_dir: PathBuf, proxy: EventLoopProxy<Msg>) {
             let age = std::fs::metadata(&stamp).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
             if settings["auto_update"] == true && age.is_none_or(|a| a.as_secs() >= UPDATE_GAP_SECS) {
                 let _ = std::fs::write(&stamp, "");
-                if let Some(version) = update_once(&dir) {
+                if let Some(Some(version)) = update_once(&dir) {
                     drop(proxy.send_event(Msg::UpdateReady(version)));
                     return;
                 }
@@ -2920,7 +3709,8 @@ fn choose_download_path(owner: isize, path: &mut PathBuf) -> bool {
     }
     // A folder that cannot be made, such as an unplugged drive, falls back to the engine's own choice.
     if !dir.is_empty() && std::fs::create_dir_all(&dir).is_ok() {
-        *path = unique_path(Path::new(&dir), &name);
+        // The engine fails a download whose path mixes / and \, and a settings file can hold either.
+        *path = unique_path(Path::new(&dir.replace('/', "\\")), &name);
     }
     true
 }
@@ -3131,6 +3921,11 @@ mod tests {
         assert_eq!(key_shortcut(0x09, true), Some("prev_tab"));
         assert_eq!(key_shortcut(0x4E, false), None); // plain Ctrl+N
         assert_eq!(key_shortcut(0x41, false), None); // Ctrl+A stays the page's
+        assert_eq!(key_shortcut(0xBB, true), Some("zoom_in"));
+        assert_eq!(key_shortcut(0x6B, false), Some("zoom_in"));
+        assert_eq!(key_shortcut(0xBD, false), Some("zoom_out"));
+        assert_eq!(key_shortcut(0x60, false), Some("zoom_reset"));
+        assert_eq!(key_shortcut(0x30, true), None);
     }
 
     #[test]
@@ -3294,6 +4089,73 @@ mod tests {
         assert!(installed.contains("'\"C:\\a b\\uninstall.exe\"'"), "{installed}");
         assert!(installed.contains("'\"C:\\a b\\r.exe\" \"%1\"'"), "{installed}");
         assert!(!install_script("r", "d", "l", None, false).contains("startpin"));
+    }
+
+    #[test]
+    fn stand_ins_decode_and_compiled_rules_survive_a_reload() {
+        for text in [&b"Man"[..], b"Ma", b"M", b"", b"(function(){})();"] {
+            assert_eq!(decode_base64(&base64(text)).unwrap(), text);
+        }
+        assert_eq!(parse_stand_in("data:application/javascript;base64,TWFu"), Some(("application/javascript".to_string(), b"Man".to_vec())));
+        assert_eq!(parse_stand_in("https://evil.test/x.js"), None);
+        assert_eq!(decode_base64("not base64!"), None);
+        let dir = std::env::temp_dir().join(format!("riffle-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = build_engine(vec!["||ads.test^".to_string()]);
+        save_engine_cache(&dir, &engine, &engine);
+        let now = std::time::SystemTime::now() - Duration::from_secs(60);
+        let loaded = cached_engine(&dir, "engine.dat", Some(now)).unwrap();
+        assert!(is_blocked(&loaded, "https://ads.test/a.js", "https://site.test/", "script"));
+        assert!(cached_engine(&dir, "engine.dat", Some(now + Duration::from_secs(3600))).is_none()); // a newer list wins
+        std::fs::write(dir.join("engine.dat"), "damaged").unwrap();
+        assert!(cached_engine(&dir, "engine.dat", Some(now)).is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn site_rules_reach_the_page_including_word_based_ones() {
+        let engine = build_engine(vec!["site.test##.box\nsite.test##div:has-text(Sponsored)\n".to_string()]);
+        let script = early_script(&engine, "https://site.test/");
+        assert!(script.contains(".box{display:none") && script.contains("has-text") && script.contains("Sponsored"), "{script}");
+        assert_eq!(early_script(&engine, "https://other.test/"), "");
+    }
+
+    #[test]
+    fn rules_find_their_built_in_scripts_and_stand_ins() {
+        let names = ["set, ads.enabled, false", "aopr, a", "acs, a, b", "nowoif", "nostif, a, 100", "rmnt, script, a", "aeld, click, a", "no-fetch-if, a", "aopw, a", "rpnt, script, a, b", "no-xhr-if, a", "aost, a, b", "nano-sib", "nosiif, a", "noeval-if, a", "nano-stb", "json-prune, a", "ra, onclick", "trusted-rpfr, a, b", "trusted-replace-xhr-response, a, b"];
+        let mut rules: String = names.iter().map(|n| format!("site.test##+js({n})\n")).collect();
+        rules.push_str("||ads.test/x.js$script,redirect=noopjs\n");
+        let mut engine = build_engine(vec![rules]);
+        engine.use_resources(built_in_resources());
+        let script = engine.url_cosmetic_resources("https://site.test/").injected_script;
+        assert_eq!(script.matches("(()=>{").count(), names.len(), "every rule above must find its script");
+        assert!(script.contains("ads.enabled"), "{script}");
+        let request = adblock::request::Request::new("https://ads.test/x.js", "https://site.test/", "script", "GET").unwrap();
+        let stand_in = engine.check_network_request(&request).redirect.unwrap();
+        assert_eq!(parse_stand_in(&stand_in).unwrap().0, "application/javascript");
+    }
+
+    #[test]
+    fn editing_a_bookmark_keeps_its_icon_and_never_blanks_it() {
+        let mut marks = vec![json!({"url": "https://a.test/", "title": "Old", "icon": "https://a.test/i.png"}), json!({"url": "https://b.test/", "title": "B"})];
+        edit_bookmark(&mut marks, "https://a.test/", "  New  ", Some("https://a.test/page"));
+        assert_eq!(marks[0], json!({"url": "https://a.test/page", "title": "New", "icon": "https://a.test/i.png"}));
+        edit_bookmark(&mut marks, "https://a.test/page", "   ", None);
+        assert_eq!(marks[0]["title"], "New");
+        edit_bookmark(&mut marks, "https://none.test/", "X", None);
+        assert_eq!(marks.len(), 2);
+        edit_bookmark(&mut marks, "https://a.test/page", "Moved", Some("https://b.test/"));
+        assert_eq!(marks, vec![json!({"url": "https://b.test/", "title": "Moved", "icon": null})]);
+    }
+
+    #[test]
+    fn zoom_steps_stop_at_the_ends_and_reset() {
+        assert_eq!(next_zoom(1.0, "in"), 1.1);
+        assert_eq!(next_zoom(1.0, "out"), 0.9);
+        assert_eq!(next_zoom(5.0, "in"), 5.0);
+        assert_eq!(next_zoom(0.25, "out"), 0.25);
+        assert_eq!(next_zoom(3.0, "reset"), 1.0);
+        assert_eq!(next_zoom(1.0, "nonsense"), 1.0);
     }
 
     #[test]

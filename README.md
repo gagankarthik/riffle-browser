@@ -2,7 +2,7 @@
   <a href="https://gagankarthik.github.io/riffle-browser/"><img src="website/logo.svg" alt="Riffle browser logo" width="112" height="112"></a>
 </p>
 
-<h1 align="center">Riffle: a fast, lightweight ad-blocking browser for Windows</h1>
+<h1 align="center">Riffle: a small, lightweight ad-blocking browser for Windows</h1>
 
 <p align="center">
   <a href="https://github.com/gagankarthik/riffle-browser/releases/latest"><img src="https://img.shields.io/github/v/release/gagankarthik/riffle-browser?label=version" alt="Latest Riffle version"></a>
@@ -18,7 +18,7 @@
   <a href="https://github.com/gagankarthik/riffle-browser/releases">All releases</a>
 </p>
 
-**Riffle is a free, open-source web browser for Windows with a built-in ad blocker.** It stops ads, trackers, pop-ups and fake redirects, puts idle tabs to sleep to save memory, and needs no account. It's written in Rust, the installer is about 3.4 MB, and it uses the WebView2 engine built into Windows, so sites render as they do in Microsoft Edge. AI agents can also control it when you allow them to.
+**Riffle is a free, open-source web browser for Windows with a built-in ad blocker.** It stops ads, trackers, pop-ups and fake redirects, puts idle tabs to sleep to save memory, and needs no account. It's written in Rust, the installer is about 3.6 MB, and it uses the WebView2 engine built into Windows, so sites render as they do in Microsoft Edge. AI agents can also control it when you allow them to.
 
 The name and logo come from a riffle, the quick, rippling stretch of a stream: pages should flow without anything in the way.
 
@@ -42,7 +42,7 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 
 ## Features
 
-- **Built-in ad blocker.** Uses Brave's open-source engine with EasyList, EasyPrivacy, uBlock's filter, badware, privacy and unbreak lists, and Peter Lowe's list, refreshed every few days into `%LOCALAPPDATA%\\Riffle`. It blocks ad requests, hides empty ad boxes, skips YouTube video ads, and runs uBlock's page-fixing scripts. Ads built into a page's own text or video, and sponsored posts, can still get through.
+- **Built-in ad blocker.** Uses Brave's open-source engine with EasyList, EasyPrivacy, uBlock's filter, badware, privacy and unbreak lists, and Peter Lowe's list, refreshed every few days into `%LOCALAPPDATA%\\Riffle`. It blocks ad requests, hides empty ad boxes, skips YouTube video ads, gives pages harmless stand-ins for ad scripts they insist on, and runs Riffle's own versions of the page scripts the most-used filter rules call for, before the page's own code. Rules using scripts Riffle has no version of do nothing, and these only run in a page's main frame. Ads built into a page's own text or video, and sponsored posts, can still get through.
 - **No trash redirects.** Pop-ups need a click on a real link, invisible links laid over a page are removed, and a click that sends you to an unrelated site is stopped. The shield in the address bar shows what was blocked, can open a stopped page anyway, and can turn blocking off for one site.
 - **Tab sleeping.** Only the 3 most recently used tabs stay in memory, tabs idle for 5 minutes are released, tabs playing audio stay awake (changeable in Settings), and hidden tabs are asked to use less. Others are released and reload when selected, shown in grey italics. Unsaved form text and background audio in a sleeping tab are lost.
 - **Safe address bar.** `javascript:` and `file:` text is searched, never run.
@@ -51,11 +51,15 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 - **Private by default.** No accounts, sync or telemetry added by Riffle. Searches go to DuckDuckGo with its ads turned off.
 - **Private windows.** Open in their own window with an explainer page. They keep no history, and their session is erased when the last one closes. The website and your network can still see the visit.
 - **Playing tabs.** A tab playing audio shows a speaker icon.
+- **Task manager.** Lists tabs and background processes with the memory each one holds, under the Developer menu or in the side list of Bookmarks and History.
+- **About Riffle.** In Settings, with your version, the engine version and Check for updates.
+- **Bookmarks.** The star opens a dialog to edit the name and link, or remove the bookmark.
+- **Zoom.** Ctrl+plus, Ctrl+minus and Ctrl+0, or the zoom control in the three dots menu. Each tab keeps its own level.
 - **Video fullscreen.** A site's fullscreen button fills the whole screen with the toolbar hidden. Esc or any browser shortcut comes back.
 - **Music controls.** The music button beside the address bar lists what is playing, with play/pause and volume for each tab.
 - **Own menus and dialogs.** The three dots menu, music dialog, confirm dialogs and Settings controls follow the theme, and work with the keyboard.
 - **History.** Searchable, with an X to remove any single entry or a button to clear it all.
-- **Downloads.** A small note under the toolbar reports each one. Ctrl+J or the toolbar button lists finished and failed downloads, and shows a file in its folder. Settings chooses the folder, or asks each time. Private windows stay off the list.
+- **Downloads.** The toolbar icon lights up while files download, and a small note under the toolbar reports each one as it starts and when it ends. Ctrl+J or the toolbar button lists finished and failed downloads, and shows a file in its folder. Settings chooses the folder, or asks each time. Private windows stay off the list.
 - **Per-site exceptions.** The shield can allow pop-ups and redirects, or turn blocking off, for one site. Settings lists every exception.
 - **New tab page.** A plain page with the search bar in the centre, or your own page from Settings.
 - **Bookmarks and history.** Stored as plain files in `%LOCALAPPDATA%\Riffle`, searchable from the menu.
@@ -66,13 +70,13 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 
 ### Keyboard shortcuts
 
-Esc leaves video fullscreen, Ctrl+Shift+N private window, Ctrl+Shift+T reopen closed tab, Ctrl+D bookmark, Ctrl+Shift+O bookmarks, Ctrl+H history, Ctrl+J downloads, Ctrl+P print, Ctrl+T new tab, Ctrl+W close, Ctrl+L address bar, Ctrl+Tab next tab, Ctrl+Shift+Tab previous tab, Ctrl+F find, Ctrl+plus and Ctrl+minus zoom, Ctrl+U page source, F12 or Ctrl+Shift+I DevTools.
+Esc leaves video fullscreen, Ctrl+Shift+N private window, Ctrl+Shift+T reopen closed tab, Ctrl+D bookmark, Ctrl+Shift+O bookmarks, Ctrl+H history, Ctrl+J downloads, Ctrl+P print, Ctrl+T new tab, Ctrl+W close, Ctrl+L address bar, Ctrl+Tab next tab, Ctrl+Shift+Tab previous tab, Ctrl+F find, Ctrl+plus and Ctrl+minus zoom, Ctrl+0 resets zoom, Ctrl+U page source, F12 or Ctrl+Shift+I DevTools.
 
 ## Performance and optimisation
 
 Riffle has not been formally benchmarked yet, so this lists how it saves resources rather than speed claims.
 
-- **Small download.** One executable of about 3.4 MB, built with link-time optimisation and size-focused compiler settings.
+- **Small download.** One executable of about 3.6 MB, built with link-time optimisation and size-focused compiler settings.
 - **Shared engine.** It uses the WebView2 engine already on Windows instead of bundling its own copy of Chromium.
 - **Tab sleeping.** Only the 3 most recently used tabs stay in memory, and tabs idle for 5 minutes are released.
 - **Fewer requests.** Blocked ads and trackers are never downloaded.
@@ -108,7 +112,7 @@ cargo build --release
 target\release\riffle-browser.exe [address]
 ```
 
-Pushing a tag such as `v0.2.0` tests and builds the installer and publishes a release. Pushing changes under `website/` to `main` updates the website.
+Pushing a tag such as `v0.3.0` tests and builds the installer and publishes a release. Pushing changes under `website/` to `main` updates the website.
 
 ## FAQ
 
@@ -134,4 +138,4 @@ Yes. Start it with `--agent` and connect a tool such as Playwright. See [For AI 
 
 ## License
 
-[MIT](LICENSE). The website's fonts are under the SIL Open Font License: see `website/fonts`.
+[MIT](LICENSE).

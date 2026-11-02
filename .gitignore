@@ -1,1 +1,5 @@
 target/
+.agents/
+.claude/
+.taste-skill/
+skills-lock.json

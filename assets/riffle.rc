@@ -8,7 +8,7 @@ BEGIN
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "FileDescription", "Riffle - fast, ad-free web browser"
+      VALUE "FileDescription", "Riffle - lightweight web browser with ad blocking"
       VALUE "ProductName", "Riffle"
       VALUE "FileVersion", "0.1.0"
       VALUE "ProductVersion", "0.1.0"
