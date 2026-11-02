@@ -171,6 +171,7 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
     <div id="sec-general-more" class="sec">
     <h2>App and data</h2>
     <div class="field" id="sites-row"><label>Site exceptions<span class="sub">Sites you changed from the shield button</span></label><div id="sites"></div></div>
+    <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub" id="update-note"></span></label><input id="auto_update" type="checkbox"></div>
     <div class="field"><label>Riffle app<span class="sub" id="app-note"></span></label><button class="plain" id="app-action"></button></div>
     <div class="field"><label>Browsing data<span class="sub">History, cookies, logins and cache. Bookmarks and settings are kept</span></label>
       <button class="plain" id="clear-data">Clear browsing data</button></div>
@@ -468,6 +469,7 @@ function showSettings(s) {
   $('max').value = s.max_live_tabs;
   $('download-dir').textContent = s.download_dir;
   $('search_suggest').checked = s.search_suggest;
+  $('auto_update').checked = s.auto_update;
   $('download_ask').checked = s.download_ask;
   $('download_show').checked = s.download_show;
   refreshPicks.forEach(f => f());
@@ -497,6 +499,7 @@ function render(next) {
   $('make-default').textContent = next.installed ? 'Make default' : 'Install Riffle';
   $('default-note').textContent = next.default_browser ? 'Riffle is your default browser' : next.installed ? 'Windows opens its settings page, where you confirm Riffle' : 'Windows can only offer Riffle as a browser once it is installed';
   $('app-note').textContent = next.installed ? 'Installed for this Windows user. You can also remove it from Windows Settings, Apps' : 'Adds Riffle to the Start menu and Windows Apps. No administrator rights needed';
+  $('update-note').textContent = next.update_ready ? `Version ${next.update_ready} is ready and starts the next time you open Riffle` : `You have version ${next.version}. Asks GitHub for a newer one once a day, and sends nothing else`;
   $('app-action').textContent = next.installed ? 'Uninstall Riffle' : 'Install Riffle';
   $('app-action').onclick = () => next.installed ? send('uninstall_app') : send('install_app');
   $('settings').hidden = !settings;
@@ -552,6 +555,7 @@ function save() {
     max_live_tabs: Number($('max').value),
     download_dir: state.settings.download_dir,
     search_suggest: $('search_suggest').checked,
+    auto_update: $('auto_update').checked,
     download_ask: $('download_ask').checked,
     download_show: $('download_show').checked,
   }});

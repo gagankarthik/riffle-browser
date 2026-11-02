@@ -1,6 +1,6 @@
 [package]
 name = "riffle-browser"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Riffle: a fast, lightweight Windows web browser with a built-in ad blocker"
 license = "MIT"

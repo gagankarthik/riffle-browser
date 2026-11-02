@@ -29,6 +29,10 @@ use windows::core::{BOOL, Interface, PCWSTR, PWSTR, w};
 use wry::{MemoryUsageLevel, NewWindowResponse, PageLoadEvent, Rect, WebContext, WebView, WebViewBuilder, WebViewBuilderExtWindows, WebViewExtWindows};
 
 const WINDOW_COLOR: (u8, u8, u8, u8) = (0x8a, 0x95, 0x9c, 0xff); // only ever seen as the DevTools divider
+const RELEASES: &str = "https://github.com/gagankarthik/riffle-browser/releases/download";
+const LATEST_RELEASE: &str = "https://api.github.com/repos/gagankarthik/riffle-browser/releases/latest";
+const UPDATE_GAP_SECS: u64 = 86_400; // how often GitHub is asked
+const UPDATE_WAKE_SECS: u64 = 6 * 3600; // so a browser left open for days still updates
 const TOOLBAR_HEIGHT: f64 = 81.0;
 const BOOKMARKS_BAR_HEIGHT: f64 = 32.0;
 const NAV_ROW_BOTTOM: f64 = 80.0; // tab row plus address row in toolbar.html
@@ -269,6 +273,7 @@ enum Msg {
     Suggestions(u64, Vec<String>),
     DevtoolsScan,
     Fullscreen(u64, bool),
+    UpdateReady(String),
 }
 
 struct Tab {
@@ -321,6 +326,7 @@ struct Browser {
     tabs: Vec<Tab>,
     active: u64,
     fullscreen: bool, // the selected tab's video or element fills the screen
+    update_ready: Option<String>, // the version that starts next time
     next_id: u64,
     clock: u64,
     last_popup: std::time::Instant,
@@ -421,6 +427,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         tabs: Vec::new(),
         active: 0,
         fullscreen: false,
+        update_ready: None,
         next_id: 1,
         clock: 0,
         last_popup: std::time::Instant::now(),
@@ -463,6 +470,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             Some(last) => browser.select(last),
             None => browser.open_tab(&browser.new_tab_url(), false),
         },
+    }
+
+    if !private_window {
+        keep_updated(browser.data_dir.clone(), event_loop.create_proxy());
     }
 
     let idle_proxy = event_loop.create_proxy();
@@ -874,7 +885,7 @@ impl Browser {
         let Some(panel) = &self.panel else { return };
         let mut history = parse_history(&read_lossy(&self.history_path()).unwrap_or_default());
         history.reverse();
-        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "default_browser": self.panel_page == "settings" && is_default_browser()});
+        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "version": env!("CARGO_PKG_VERSION"), "update_ready": self.update_ready, "default_browser": self.panel_page == "settings" && is_default_browser()});
         let _ = panel.evaluate_script(&format!("render({state})"));
     }
 
@@ -1541,6 +1552,12 @@ impl Browser {
                 }
             }
             Msg::DevtoolsScan => self.scan_devtools(),
+            Msg::UpdateReady(version) => {
+                self.update_ready = Some(version);
+                if self.panel_page == "settings" {
+                    self.render_panel();
+                }
+            }
             Msg::Fullscreen(id, on) => {
                 if id == self.active {
                     self.set_fullscreen(on);
@@ -2542,9 +2559,11 @@ New-ItemProperty 'HKCU:\\Software\\RegisteredApplications' -Name Riffle -Value '
 /// Closes Riffle and removes everything but its own folder. Never stops `keep`, the process running this uninstall.
 fn uninstall_script(exe: &str, link: &str, desktop: &str, data: Option<&str>, keep: u32) -> String {
     let (q_exe, q_link, q_desktop) = (ps_quote(exe), ps_quote(link), ps_quote(desktop));
+    let q_old = ps_quote(&Path::new(exe).with_extension("old").to_string_lossy()); // a window still open since an update
     let wipe = data.map_or(String::new(), |d| format!("\nforeach($i in 1..15){{ Remove-Item -LiteralPath {0} -Recurse -Force -ErrorAction SilentlyContinue; if(-not(Test-Path -LiteralPath {0})){{break}}; Start-Sleep 1 }}", ps_quote(d)));
     format!(
         "Get-Process riffle-browser -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -eq {q_exe} -and $_.Id -ne {keep} }} | Stop-Process -Force
+Get-Process riffle-browser -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -eq {q_old} }} | Stop-Process -Force
 Start-Sleep 2
 try {{ (New-Object -ComObject Shell.Application).Namespace((Split-Path {q_link})).ParseName((Split-Path {q_link} -Leaf)).InvokeVerb('startunpin') }} catch {{}}
 Remove-Item '{UNINSTALL_KEY}','{PROG_KEY}','{CLIENT_KEY}' -Recurse -Force -ErrorAction SilentlyContinue
@@ -2564,6 +2583,102 @@ foreach($i in 1..15){{ Remove-Item -LiteralPath {q_dir} -Recurse -Force -ErrorAc
 
 fn taskbar_pinned() -> bool {
     std::env::var_os("APPDATA").is_some_and(|d| PathBuf::from(d).join("Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Riffle.lnk").exists())
+}
+
+/// "v1.2.3" as numbers. Anything else, such as a test release's "1.2.3-rc1", is never installed.
+fn parse_version(tag: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = tag.strip_prefix('v').unwrap_or(tag).split('.').map(|p| p.parse::<u64>().ok());
+    let version = (parts.next()??, parts.next()??, parts.next()??);
+    parts.next().is_none().then_some(version)
+}
+
+fn is_newer(tag: &str, current: &str) -> bool {
+    matches!((parse_version(tag), parse_version(current)), (Some(new), Some(old)) if new > old)
+}
+
+/// The hash SHA256SUMS.txt lists for a file.
+fn listed_hash(sums: &str, file: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let (hash, name) = line.split_once(char::is_whitespace)?;
+        (name.trim().trim_start_matches('*') == file && is_sha256(hash)).then(|| hash.to_lowercase())
+    })
+}
+
+fn is_sha256(text: &str) -> bool {
+    text.len() == 64 && text.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn file_hash(path: &Path) -> Option<String> {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new(system32("certutil.exe")).arg("-hashfile").arg(path).arg("SHA256").creation_flags(CREATE_NO_WINDOW).output().ok()?;
+    String::from_utf8_lossy(&out.stdout).lines().map(|l| l.replace(' ', "")).find(|l| is_sha256(l)).map(|l| l.to_lowercase())
+}
+
+fn fetch_text(url: &str) -> Option<String> {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let out = std::process::Command::new(system32("curl.exe")).args(["-fsSL", "--proto", "=https", "--max-time", "20", url]).creation_flags(CREATE_NO_WINDOW).output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// Puts dir's riffle-browser.new in place. Windows allows renaming a running program, so open windows carry on
+/// with the old version and the next start gets the new one. Any failure leaves the old version working.
+fn swap_in_update(dir: &Path) -> std::io::Result<()> {
+    let (exe, new, old) = (dir.join("riffle-browser.exe"), dir.join("riffle-browser.new"), dir.join("riffle-browser.old"));
+    let (uninstaller, old_uninstaller) = (dir.join("uninstall.exe"), dir.join("uninstall.old"));
+    let _ = std::fs::remove_file(&old);
+    let _ = std::fs::remove_file(&old_uninstaller);
+    std::fs::rename(&exe, &old)?;
+    if let Err(e) = std::fs::rename(&new, &exe) {
+        std::fs::rename(&old, &exe)?;
+        return Err(e);
+    }
+    // uninstall.exe is the same file under a second name, so it must follow.
+    let _ = std::fs::rename(&uninstaller, &old_uninstaller);
+    std::fs::hard_link(&exe, &uninstaller).or_else(|_| std::fs::copy(&exe, &uninstaller).map(drop))
+}
+
+/// Checks GitHub once and installs anything newer, returning its version.
+fn update_once(dir: &Path) -> Option<String> {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let release: Value = serde_json::from_str(&fetch_text(LATEST_RELEASE)?).ok()?;
+    let tag = release["tag_name"].as_str()?;
+    // Numbers only from here on, so the tag is safe inside an address.
+    if !is_newer(tag, env!("CARGO_PKG_VERSION")) {
+        return None;
+    }
+    let expected = listed_hash(&fetch_text(&format!("{RELEASES}/{tag}/SHA256SUMS.txt"))?, "RiffleSetup.exe")?;
+    let new = dir.join("riffle-browser.new");
+    let fetched = std::process::Command::new(system32("curl.exe")).args(["-fsSL", "--proto", "=https", "--max-time", "600", "-o"]).arg(&new).arg(format!("{RELEASES}/{tag}/RiffleSetup.exe")).creation_flags(CREATE_NO_WINDOW).status();
+    if !fetched.is_ok_and(|s| s.success()) || file_hash(&new).as_deref() != Some(expected.as_str()) || swap_in_update(dir).is_err() {
+        let _ = std::fs::remove_file(&new);
+        return None;
+    }
+    let version = tag.trim_start_matches('v').to_string();
+    let _ = std::process::Command::new(system32("reg.exe")).args(["add", &UNINSTALL_KEY.replace("HKCU:", "HKCU"), "/v", "DisplayVersion", "/d", &version, "/f"]).creation_flags(CREATE_NO_WINDOW).status();
+    Some(version)
+}
+
+/// Only the installed copy updates itself: a copy someone built or carried elsewhere is theirs to manage.
+fn keep_updated(data_dir: PathBuf, proxy: EventLoopProxy<Msg>) {
+    let Some(dir) = install_dir().filter(|_| is_installed()) else { return };
+    std::thread::spawn(move || {
+        for leftover in ["riffle-browser.old", "uninstall.old", "riffle-browser.new"] {
+            let _ = std::fs::remove_file(dir.join(leftover)); // fails harmlessly while an old window is open
+        }
+        let stamp = data_dir.join("update-check");
+        loop {
+            let settings = sanitize_settings(&load_json(&data_dir.join("settings.json"))); // another window may have changed it
+            let age = std::fs::metadata(&stamp).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+            if settings["auto_update"] == true && age.is_none_or(|a| a.as_secs() >= UPDATE_GAP_SECS) {
+                let _ = std::fs::write(&stamp, "");
+                if let Some(version) = update_once(&dir) {
+                    drop(proxy.send_event(Msg::UpdateReady(version)));
+                    return;
+                }
+            }
+            std::thread::sleep(Duration::from_secs(UPDATE_WAKE_SECS));
+        }
+    });
 }
 
 /// Copies Riffle to the user's own programs folder and lists it in Windows. Needs no administrator rights.
@@ -2830,6 +2945,7 @@ fn sanitize_settings(raw: &Value) -> Value {
         "adblock": raw["adblock"] != false,
         "download_dir": raw["download_dir"].as_str().filter(|d| Path::new(d).is_absolute()).map_or_else(default_download_dir, str::to_string),
         "search_suggest": raw["search_suggest"] != false,
+        "auto_update": raw["auto_update"] != false,
         "download_ask": raw["download_ask"] == true,
         "download_show": raw["download_show"] != false,
         "max_live_tabs": raw["max_live_tabs"].as_u64().unwrap_or(DEFAULT_LIVE_TABS).clamp(1, 32),
@@ -3034,8 +3150,8 @@ mod tests {
     #[test]
     fn bad_settings_fall_back_and_good_ones_stay() {
         let bad = sanitize_settings(&json!({"theme": "x", "accent": "red;}", "search": "javascript:alert(1)//", "home": "file:///c:/x", "adblock": "no", "max_live_tabs": 999}));
-        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
-        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
+        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "auto_update": true, "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
+        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "auto_update": false, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
         assert_eq!(sanitize_settings(&good), good);
         assert_eq!(sanitize_settings(&Value::Null)["adblock"], true);
     }
@@ -3178,6 +3294,39 @@ mod tests {
         assert!(installed.contains("'\"C:\\a b\\uninstall.exe\"'"), "{installed}");
         assert!(installed.contains("'\"C:\\a b\\r.exe\" \"%1\"'"), "{installed}");
         assert!(!install_script("r", "d", "l", None, false).contains("startpin"));
+    }
+
+    #[test]
+    fn only_a_newer_plain_version_counts() {
+        assert!(is_newer("v0.2.0", "0.1.9") && is_newer("0.10.0", "0.9.0") && is_newer("v1.0.0", "0.9.9"));
+        for tag in ["v0.1.0", "v0.0.9", "v9.0.0-rc1", "v9.0", "v9.0.0.0", "../evil", ""] {
+            assert!(!is_newer(tag, "0.1.0"), "{tag}");
+        }
+    }
+
+    #[test]
+    fn checksum_list_gives_only_a_real_hash_for_that_file() {
+        let hash = "A".repeat(64);
+        assert_eq!(listed_hash(&format!("{hash}  RiffleSetup.exe\n"), "RiffleSetup.exe"), Some("a".repeat(64)));
+        assert_eq!(listed_hash(&format!("{hash} *RiffleSetup.exe\r\n"), "RiffleSetup.exe"), Some("a".repeat(64)));
+        assert_eq!(listed_hash(&format!("{hash}  Other.exe"), "RiffleSetup.exe"), None);
+        assert_eq!(listed_hash("abc  RiffleSetup.exe", "RiffleSetup.exe"), None);
+    }
+
+    #[test]
+    fn an_update_replaces_both_names_and_a_failed_one_keeps_the_old_version() {
+        let dir = std::env::temp_dir().join(format!("riffle-swap-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("riffle-browser.exe"), "old").unwrap();
+        std::fs::hard_link(dir.join("riffle-browser.exe"), dir.join("uninstall.exe")).unwrap();
+        assert!(swap_in_update(&dir).is_err()); // nothing downloaded
+        assert_eq!(std::fs::read_to_string(dir.join("riffle-browser.exe")).unwrap(), "old");
+        std::fs::write(dir.join("riffle-browser.new"), "new").unwrap();
+        swap_in_update(&dir).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("riffle-browser.exe")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(dir.join("uninstall.exe")).unwrap(), "new");
+        assert!(!dir.join("riffle-browser.new").exists());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
