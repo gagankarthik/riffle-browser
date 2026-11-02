@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle download</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+* { box-sizing: border-box; }
+svg.i { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { display: flex; flex-direction: column; justify-content: space-between; padding: 12px; }
+#top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#mark { display: flex; color: var(--tint); }
+#text { flex: 1; min-width: 0; }
+#file { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 600; }
+#state { color: var(--muted); font-size: 12px; }
+#actions { display: flex; justify-content: flex-end; gap: 8px; }
+button { height: 28px; padding: 0 12px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: inherit; }
+button:hover { background: var(--hover); }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 1px; }
+#x { display: grid; place-items: center; width: 28px; padding: 0; border: 0; border-radius: 50%; }
+#show:not([hidden]) { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+</style>
+<!--ICONS-->
+<div id="top" role="status">
+  <span id="mark"></span>
+  <div id="text"><div id="file"></div><div id="state"></div></div>
+  <button id="x" aria-label="Close" title="Close"></button>
+</div>
+<div id="actions"><button id="all">All downloads</button><button id="show">Show in folder</button></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+const icon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+};
+$('x').append(icon('close'));
+let timer = 0, path = '';
+function render(state) {
+  document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  document.documentElement.style.setProperty('--accent', state.accent);
+  const ok = state.state === 'done';
+  path = state.path;
+  $('mark').replaceChildren(icon(ok ? 'download' : 'warn'));
+  $('file').textContent = state.file; // textContent: file names come from websites
+  $('file').title = state.file;
+  $('state').textContent = ok ? 'Download finished' : 'Download failed';
+  $('show').hidden = !ok;
+  clearTimeout(timer);
+  timer = setTimeout(close, 8000);
+}
+const close = () => send('download_close');
+$('x').onclick = close;
+$('show').onclick = () => { send('show_download', {value: path}); close(); };
+$('all').onclick = () => send('panel', {value: 'downloads'});
+// Stays while the pointer is on it, so it never vanishes under a click.
+addEventListener('mouseenter', () => clearTimeout(timer));
+addEventListener('mouseleave', () => { timer = setTimeout(close, 3000); });
+send('download_ready');
+</script>
+</html>

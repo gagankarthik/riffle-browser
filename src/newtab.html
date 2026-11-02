@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="__THEME__" data-private="__PRIVATE__">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>New tab</title>
+<style>
+:root { --accent: __ACCENT__; --bg: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --ink: #14212b; --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --field: #ffffff; --muted: #46555f; --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 8px 24px rgb(16 40 60 / .14); color-scheme: light; }
+:root.dark { --bg: color-mix(in srgb, var(--accent) 7%, #1a1e21); --ink: #edf1f4; --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --field: color-mix(in srgb, var(--accent) 9%, #262b2f); --muted: #c3ccd2; --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 24px rgb(0 0 0 / .40); color-scheme: dark; }
+:root[data-private=true] { --bg: #242424; --ink: #f1f1f1; --line: #8e918f; --field: #141414; --muted: #d5d8d6; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 12vh 24px 24px; overflow-y: auto; }
+#name { margin: 0; font: 72px/1 Gabriola, Georgia, serif; color: var(--tint); user-select: none; }
+form { width: min(600px, 100%); }
+input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 21px; box-shadow: var(--shadow); background: var(--field); color: inherit; font: 14px "Segoe UI", sans-serif; }
+input::placeholder { color: var(--muted); opacity: 1; }
+input:focus { outline: 2px solid var(--tint); outline-offset: -2px; }
+p { margin: 0; color: var(--muted); line-height: 20px; }
+#note { width: min(600px, 100%); }
+#note[hidden] { display: none; }
+h1 { margin: 0 0 8px; font-size: 20px; font-weight: 500; line-height: 28px; }
+h2 { margin: 0 0 8px; font-size: 14px; font-weight: 500; line-height: 20px; }
+.cols { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 16px 0; }
+.cols > div { flex: 1 1 240px; }
+ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 24px; }
+</style>
+<h1 id="name">Riffle</h1>
+<form id="go"><input id="q" aria-label="Search or enter address" placeholder="Search or enter address" spellcheck="false" autocomplete="off" autofocus></form>
+<section id="note" hidden>
+  <h1>You're browsing privately</h1>
+  <p>Others who use this device won't see your activity here. This doesn't change how websites you visit and the services they use collect data. Downloads and bookmarks will be saved.</p>
+  <div class="cols">
+    <div><h2>Riffle won't save</h2><ul><li>Your browsing history</li><li>Cookies and site data</li><li>Logins made in this window</li></ul></div>
+    <div><h2>Your activity might still be visible to</h2><ul><li>Websites you visit</li><li>Your employer or school</li><li>Your internet service provider</li></ul></div>
+  </div>
+  <p class="foot">Closing every private window erases this session. Ads and trackers are blocked here too, unless you turned that off in Settings.</p>
+</section>
+<script>
+const root = document.documentElement, theme = root.dataset.theme;
+root.classList.toggle('dark', theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+document.getElementById('note').hidden = root.dataset.private !== 'true';
+document.getElementById('go').onsubmit = e => {
+  e.preventDefault();
+  window.ipc.postMessage('go:' + document.getElementById('q').value);
+};
+</script>
+</html>

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle menu</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+* { box-sizing: border-box; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { overflow-y: auto; scrollbar-width: thin; }
+#items { padding: 8px 0; }
+button { display: flex; align-items: center; gap: 12px; width: 100%; height: 32px; padding: 0 16px; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button:hover:enabled, button:focus { background: var(--hover); outline: none; }
+button:focus-visible { outline: 2px solid var(--tint); outline-offset: -2px; }
+button:disabled, button:disabled .ic, button:disabled .keys { color: var(--off); }
+.ic { display: flex; flex: none; color: var(--tint); }
+.label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.keys { flex: none; color: var(--muted); font-size: 12px; }
+hr { height: 1px; margin: 4px 0; border: 0; background: var(--line); }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+</style>
+<!--ICONS-->
+<div id="items" role="menu" aria-label="Browser menu"></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const items = document.getElementById('items');
+const icon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+};
+function render(state) {
+  const dark = state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  document.documentElement.style.setProperty('--accent', state.accent);
+  items.replaceChildren(...state.items.map(item => {
+    if (!item.label) {
+      const line = document.createElement('hr');
+      line.setAttribute('role', 'separator');
+      return line;
+    }
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitem');
+    b.disabled = item.disabled;
+    b.onclick = () => send('menu_pick', {value: item.action});
+    const ic = document.createElement('span');
+    ic.className = 'ic';
+    ic.append(icon(item.icon));
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = item.label;
+    const keys = document.createElement('span');
+    keys.className = 'keys';
+    keys.textContent = item.keys;
+    b.append(ic, label, keys);
+    return b;
+  }));
+  if (state.sub) items.querySelector('button').focus();
+}
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') return send('menu_close');
+  const all = [...items.querySelectorAll('button:enabled')];
+  const at = all.indexOf(document.activeElement);
+  const next = {ArrowDown: (at + 1) % all.length, ArrowUp: (at <= 0 ? all.length : at) - 1, Home: 0, End: all.length - 1}[e.key];
+  if (next !== undefined) { e.preventDefault(); all[next].focus(); }
+});
+// Clicking anywhere else dismisses it. The delay rides out focus moving between this window and its page.
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('menu_close'); }, 100));
+send('menu_ready');
+</script>
+</html>

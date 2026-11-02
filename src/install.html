@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle Setup</title>
+<style>
+:root { --bar: #ffffff; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --ink: #1f1f1f; --hover: #d3d6da; --line: #b8bcc2; --edge: #747775; --muted: #3c4043; --accent: #0b6e8f; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bar: #2d2d2d; --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --ink: #e8eaed; --hover: #4a4a4a; --line: #5f6368; --edge: #8e918f; --muted: #d5d8d6; color-scheme: dark; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: var(--strip); box-shadow: 0 2px 8px rgb(16 40 60 / .14); position: relative; }
+header svg { width: 40px; height: 40px; flex: none; }
+h1 { margin: 0; font-size: 20px; font-weight: 700; }
+header p { margin: 2px 0 0; color: var(--muted); }
+main { flex: 1; min-height: 0; padding: 20px 24px; overflow-y: auto; }
+footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--line); }
+button { min-width: 88px; height: 32px; padding: 0 16px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: inherit; }
+button:hover { background: var(--hover); }
+button.go { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 2px 6px rgb(16 40 60 / .25); }
+button.go.danger { border-color: #b3261e; background: #b3261e; }
+button.go:hover { background: var(--accent); filter: brightness(1.15); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.place { margin: 4px 0 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; user-select: text; }
+.check { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--accent); }
+.note { color: var(--muted); line-height: 20px; }
+.error { font-weight: 600; overflow-wrap: anywhere; }
+[hidden] { display: none !important; }
+</style>
+<header>
+  <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.8 9 0t9 0M7 21q4.5-4.8 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>
+  <div><h1 id="title">Install Riffle</h1><p id="subtitle">Fast, lightweight, with ads blocked. No administrator rights needed.</p></div>
+</header>
+<main>
+  <section id="choose">
+    <div>Install location</div>
+    <div class="place" id="place"></div>
+    <label class="check"><input id="desktop" type="checkbox" checked>Add a shortcut to the desktop</label>
+    <label class="check"><input id="start" type="checkbox" checked>Pin to Start</label>
+    <label class="check"><input id="taskbar" type="checkbox" checked>Show me how to pin to the taskbar</label>
+  </section>
+  <section id="remove" hidden>
+    <p class="note">This removes Riffle, its shortcuts and its Windows entries. Any open Riffle windows will close. Files you downloaded are never touched.</p>
+    <label class="check"><input id="wipe" type="checkbox">Also delete my bookmarks, history, logins and settings</label>
+  </section>
+  <section id="working" hidden>
+    <div id="step" role="status"></div>
+    <progress id="bar" max="100" value="0" aria-label="Install progress"></progress>
+  </section>
+  <section id="done" hidden>
+    <p class="note" id="done-note"></p>
+    <label class="check"><input id="launch" type="checkbox" checked>Open Riffle now</label>
+  </section>
+  <section id="failed" hidden><p class="error" id="error" role="alert"></p></section>
+</main>
+<footer>
+  <button id="cancel">Cancel</button>
+  <button id="install" class="go">Install</button>
+  <button id="finish" class="go" hidden>Finish</button>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const show = name => { for (const s of ['choose', 'remove', 'working', 'done', 'failed']) $(s).hidden = s !== name; };
+let removing = false;
+function setup(place, remove) {
+  removing = remove;
+  $('place').textContent = place;
+  if (remove) {
+    show('remove');
+    $('title').textContent = 'Uninstall Riffle';
+    $('subtitle').textContent = 'From ' + place;
+    $('install').textContent = 'Uninstall';
+    $('install').classList.add('danger');
+    $('cancel').focus(); // the safe choice has focus, so Enter never removes anything by accident
+  } else $('install').focus();
+}
+function progress(percent, text) { $('bar').value = percent; $('step').textContent = text; }
+function finished(pinned) {
+  show('done');
+  $('title').textContent = 'Riffle is installed';
+  $('subtitle').textContent = 'You can remove it any time from Windows Settings, Apps.';
+  $('done-note').textContent = pinned ? 'Riffle is ready to use.' : 'One step left, because Windows keeps this to you: with Riffle open, right-click its icon in the taskbar and choose Pin to taskbar.';
+  $('finish').hidden = false;
+  $('cancel').hidden = true;
+  $('finish').focus();
+}
+function removed() {
+  show('done');
+  $('title').textContent = 'Riffle has been removed';
+  $('subtitle').textContent = '';
+  $('done-note').textContent = $('wipe').checked ? 'Your Riffle data was deleted too.' : 'Your bookmarks, history and settings were kept, in case you install Riffle again.';
+  $('launch').parentElement.hidden = true;
+  $('launch').checked = false;
+  $('finish').hidden = false;
+  $('finish').focus();
+}
+function failed(text) {
+  show('failed');
+  $('title').textContent = removing ? 'Riffle was not removed' : 'Riffle was not installed';
+  $('subtitle').textContent = '';
+  $('error').textContent = text;
+  $('cancel').hidden = false;
+  $('cancel').textContent = 'Close';
+  $('cancel').focus();
+}
+$('cancel').onclick = () => send('quit');
+$('install').onclick = () => {
+  show('working');
+  $('title').textContent = removing ? 'Uninstalling Riffle' : 'Installing Riffle';
+  $('install').hidden = true;
+  $('cancel').hidden = true;
+  if (removing) send('uninstall', {wipe: $('wipe').checked});
+  else send('install', {desktop: $('desktop').checked, start: $('start').checked, taskbar: $('taskbar').checked});
+};
+$('finish').onclick = () => send('finish', {launch: $('launch').checked});
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('cancel').hidden) send('quit'); });
+send('ready');
+</script>
+</html>

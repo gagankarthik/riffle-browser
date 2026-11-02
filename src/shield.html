@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle shield</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+#sheet { display: block; }
+section { padding: 16px; }
+section + section { border-top: 1px solid var(--line); }
+h1 { margin: 0; font-size: 14px; font-weight: 500; line-height: 20px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sub { display: block; color: var(--muted); font-size: 12px; line-height: 16px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.row > div, .row > label { flex: 1; min-width: 0; }
+button { flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--edge); border-radius: 8px; background: var(--bar); color: inherit; font: inherit; }
+button:hover { background: var(--hover); }
+p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+input { appearance: none; position: relative; flex: none; width: 36px; height: 20px; margin: 0; border: 1px solid var(--edge); border-radius: 10px; background: var(--bar); }
+input::before { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--edge); }
+input:checked { border-color: var(--ink); background: var(--ink); }
+input:checked::before { background: var(--bar); transform: translateX(16px); }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+</style>
+<div id="sheet">
+<section id="head">
+  <h1 id="count"></h1>
+  <span class="sub" id="site"></span>
+  <p>Riffle blocks ads, trackers, unwanted pop-ups and redirects before they load.</p>
+</section>
+<section id="redirect" hidden>
+  <div class="row">
+    <div><h1>Pop-up or redirect stopped</h1><span class="sub" id="target"></span></div>
+    <button id="open">Open</button>
+  </div>
+  <p>This page tried to send you to another site. Open it only if you expected it.</p>
+</section>
+<section>
+  <div class="row">
+    <label for="on">Block ads on this site</label>
+    <input id="on" type="checkbox">
+  </div>
+  <p>Turn this off if the site looks broken or won't play. The page reloads.</p>
+</section>
+<section>
+  <div class="row">
+    <label for="popups">Allow pop-ups and redirects</label>
+    <input id="popups" type="checkbox">
+  </div>
+  <p>For sites you trust that need them, such as sign-in or payment windows.</p>
+</section>
+</div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+function render(state) {
+  const dark = state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  $('count').textContent = state.blocked === 1 ? '1 item blocked on this page' : state.blocked + ' items blocked on this page';
+  $('site').textContent = state.site;
+  $('redirect').hidden = !state.target;
+  $('target').textContent = state.target; // textContent: this address comes from a web page
+  $('target').title = state.target;
+  $('on').checked = state.on;
+  $('popups').checked = state.popups;
+  send('shield_size', {value: $('sheet').offsetHeight});
+}
+$('open').onclick = () => send('shield_open');
+$('popups').onchange = () => send('shield_popups', {value: $('popups').checked});
+$('on').onchange = () => send('shield_site', {value: $('on').checked});
+addEventListener('keydown', e => { if (e.key === 'Escape') send('shield_close'); });
+// Clicking anywhere else dismisses it. The delay rides out focus moving between this window and its page.
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('shield_close'); }, 100));
+send('shield_ready');
+</script>
+</html>

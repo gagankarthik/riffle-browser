@@ -1,0 +1,115 @@
+@font-face { font-family: "Young Serif"; src: url(fonts/young-serif-latin-400-normal.woff2) format("woff2"); font-display: swap; }
+@font-face { font-family: "Atkinson"; src: url(fonts/atkinson-hyperlegible-latin-400-normal.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Atkinson"; src: url(fonts/atkinson-hyperlegible-latin-700-normal.woff2) format("woff2"); font-weight: 700; font-display: swap; }
+
+:root {
+  --teal: #0b6e8f;
+  --pool: #07485e;
+  --foam: #eaf4f2;
+  --ink: #0c2730;
+  --pebble: #b9ae9c;
+  --sun: #f2c14e;
+  --gutter: clamp(20px, 6vw, 96px);
+  --serif: "Young Serif", Georgia, serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--foam); color: var(--ink); font: 400 1.125rem/1.6 "Atkinson", "Segoe UI", sans-serif; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 400; margin: 0; }
+h2 { font-size: clamp(2.25rem, 5.5vw, 4.25rem); line-height: 1.05; }
+p { margin: 0; max-width: 62ch; }
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
+.skip { position: absolute; left: -999px; top: 8px; z-index: 5; background: #fff; color: var(--ink); padding: 8px 16px; }
+.skip:focus { left: 8px; }
+
+/* The stream: logo waves on the logo's own colour, running behind real pop-up junk. */
+.hero { position: relative; min-height: 100svh; display: flex; flex-direction: column; justify-content: space-between; background: var(--teal); color: #fff; overflow: hidden; }
+#water { position: absolute; inset: 0 0 auto; width: 100%; height: 58%; -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+.top { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 20px var(--gutter); }
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font: 1.5rem var(--serif); }
+.brand img { background: #fff; border-radius: 50%; padding: 1px; }
+.top-link { color: #fff; text-underline-offset: 4px; }
+
+.rocks { position: absolute; inset: 0 0 auto; height: 58%; z-index: 1; }
+.rock { position: absolute; transform: translate(-50%, -50%); padding: 14px 22px; border: 0; background: var(--pebble); color: var(--ink); font: 700 .95rem "Atkinson", sans-serif; cursor: pointer; white-space: nowrap; transition: transform .45s cubic-bezier(.5, 0, .9, .4), opacity .45s; box-shadow: inset -6px -8px 0 rgb(12 39 48 / .14); }
+.rock:hover { background: #cbc1b0; }
+.rock.gone { transform: translate(-50%, 40%) scale(.2) rotate(14deg); opacity: 0; pointer-events: none; }
+/* Hand-cut, so no two stones match. */
+.r1 { left: 16%; top: 42%; border-radius: 58% 42% 52% 48% / 62% 54% 46% 38%; }
+.r2 { left: 38%; top: 74%; border-radius: 44% 56% 40% 60% / 50% 66% 34% 50%; }
+.r3 { left: 57%; top: 34%; border-radius: 62% 38% 56% 44% / 44% 58% 42% 56%; }
+.r4 { left: 75%; top: 66%; border-radius: 40% 60% 62% 38% / 58% 40% 60% 42%; }
+.r5 { left: 89%; top: 28%; border-radius: 52% 48% 38% 62% / 40% 60% 40% 60%; }
+
+.pitch { position: relative; z-index: 2; padding: 0 var(--gutter) clamp(32px, 6vh, 64px); }
+h1 { font-size: clamp(3.5rem, 9.4vw, 13rem); line-height: .95; letter-spacing: -.015em; margin-bottom: 20px; margin-left: -.04em; }
+.pitch > p:not(.count) { font-size: clamp(1.125rem, 1.8vw, 1.5rem); line-height: 1.4; max-width: 34em; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 24px; }
+.primary { display: inline-block; padding: 14px 28px; border: 0; border-radius: 28px; background: var(--sun); color: var(--ink); font: 700 1.125rem "Atkinson", sans-serif; text-decoration: none; cursor: pointer; transition: background-color .15s; }
+.primary:hover { background: #ffd56e; }
+.secondary { color: #fff; font-weight: 700; text-underline-offset: 4px; }
+.count { margin-top: 12px; font-size: 1rem; min-height: 1.6em; }
+
+main section { padding: clamp(64px, 11vw, 160px) var(--gutter); }
+
+/* A definition list, because that's what this is: a thing, then what happens to it. */
+.blocks { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 32px clamp(32px, 6vw, 96px); align-items: start; }
+.blocks dl { margin: 0; grid-column: 2; grid-row: 1 / span 2; }
+.blocks dt { font: 1.5rem/1.25 var(--serif); color: var(--pool); }
+.blocks dd { margin: 6px 0 36px; max-width: 56ch; }
+.blocks dd:last-child { margin-bottom: 0; }
+.honest { grid-column: 1; align-self: end; border-left: 4px solid var(--sun); padding-left: 20px; }
+.honest h3 { font-size: 1.375rem; margin-bottom: 6px; }
+
+.sleep { background: var(--pool); color: #fff; }
+.sleep-text p { margin-top: 20px; font-size: 1.25rem; line-height: 1.5; }
+.demo { margin: clamp(32px, 5vw, 64px) calc(var(--gutter) * -1) 20px; padding: 16px var(--gutter) 0; background: var(--teal); }
+.hint { margin-bottom: 12px; min-height: 1.6em; }
+.strip { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tab { flex: 1 0 150px; max-width: 240px; padding: 12px 14px; border: 0; border-radius: 8px 8px 0 0; background: none; color: #fff; font: 400 .95rem "Atkinson", sans-serif; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: background-color .15s, color .15s; }
+.tab:hover { background: rgb(255 255 255 / .14); }
+.tab:focus-visible { outline-offset: -3px; }
+.tab[aria-pressed=true] { background: var(--foam); color: var(--ink); font-weight: 700; }
+.tab.asleep { color: #bfdbe3; font-style: italic; } /* grey italics, as in the real tab strip */
+.fine { font-size: 1rem; }
+
+.private { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 24px clamp(32px, 6vw, 96px); }
+.private h2 { grid-column: 1 / -1; }
+.private .big { font: 1.75rem/1.35 var(--serif); }
+.private .big, .private p { max-width: none; }
+
+.agents { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px clamp(32px, 6vw, 96px); align-items: center; background: #d5e7e5; }
+.agents p { margin-top: 16px; }
+pre { margin: 0; padding: 24px; overflow-x: auto; background: var(--ink); color: var(--foam); border-radius: 6px; font: .95rem/1.7 Consolas, "Cascadia Mono", monospace; }
+.c { color: #9fc3cc; }
+
+.download { background: var(--sun); }
+.download h2 { font-size: clamp(3rem, 10vw, 9rem); margin-bottom: 24px; }
+.download .primary { background: var(--ink); color: #fff; }
+.download .primary:hover { background: var(--pool); }
+.download .fine { margin-top: 12px; }
+.download ol { margin: 40px 0 24px; padding-left: 1.3em; max-width: 62ch; }
+.download li { margin-bottom: 8px; }
+.download li::marker { font-family: var(--serif); }
+
+footer a { color: inherit; text-underline-offset: 3px; }
+footer a { color: inherit; text-underline-offset: 3px; }
+footer { display: flex; align-items: center; gap: 12px; padding: 24px var(--gutter); background: var(--ink); color: var(--foam); font-size: 1rem; }
+
+@media (max-width: 760px) {
+  .blocks, .private, .agents { grid-template-columns: minmax(0, 1fr); }
+  .blocks dl, .honest { grid-column: 1; grid-row: auto; }
+  #water, .rocks { height: 46%; }
+  .rock { padding: 10px 14px; font-size: .8rem; }
+  .r1 { left: 25%; top: 36%; }
+  .r2 { left: 30%; top: 82%; }
+  .r3 { left: 68%; top: 54%; }
+  .r4 { left: 80%; top: 86%; }
+  .r5 { left: 76%; top: 24%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .rock, .primary, .tab { transition: none; }
+}

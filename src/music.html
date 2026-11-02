@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle music</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+* { box-sizing: border-box; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { overflow-y: auto; scrollbar-width: thin; }
+button { padding: 0; border: 0; background: none; color: inherit; font: inherit; }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+
+.item { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.item + .item { border-top: 1px solid var(--line); }
+.title { display: block; width: 100%; min-width: 0; text-align: left; border-radius: 4px; }
+.title:hover .name { text-decoration: underline; }
+.name, .site { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.name { font-size: 14px; font-weight: 500; line-height: 20px; }
+.site { color: var(--muted); font-size: 12px; line-height: 16px; }
+
+.row { display: flex; align-items: center; gap: 8px; }
+.play { flex: none; display: grid; place-items: center; width: 36px; height: 36px; margin-right: 4px; border-radius: 50%; background: var(--ink); color: var(--bar); }
+.play:hover { opacity: .85; }
+.mute { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; }
+.mute:hover { background: var(--hover); }
+.percent { flex: none; width: 36px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+
+input[type=range] { flex: 1; min-width: 0; height: 24px; margin: 0; background: none; appearance: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--ink) var(--level, 100%), var(--track) var(--level, 100%)); }
+input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--ink); }
+
+.empty { display: flex; align-items: center; gap: 12px; height: 100%; padding: 0 16px; }
+.empty svg { flex: none; color: var(--muted); }
+.empty .site { white-space: normal; }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+</style>
+<!--ICONS-->
+<div id="items"></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const items = document.getElementById('items');
+const icon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+};
+const nodes = new Map(); // kept between updates, so a slider being dragged is not replaced under the pointer
+
+function showLevel(parts, volume) {
+  const percent = Math.round(volume * 100);
+  parts.slider.style.setProperty('--level', percent + '%');
+  parts.percent.textContent = percent + '%';
+  parts.mute.replaceChildren(icon(percent === 0 ? 'muted' : 'volume'));
+  parts.mute.title = percent === 0 ? 'Unmute' : 'Mute';
+}
+
+function item(t) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  div.innerHTML = '<button class="title" title="Go to this tab"><span class="name"></span><span class="site"></span></button><div class="row"><button class="play"></button><button class="mute"></button><input type="range" min="0" max="100"><span class="percent"></span></div>';
+  const parts = {name: div.querySelector('.name'), site: div.querySelector('.site'), play: div.querySelector('.play'), mute: div.querySelector('.mute'), slider: div.querySelector('input'), percent: div.querySelector('.percent')};
+  div.parts = parts;
+  div.querySelector('.title').onclick = () => send('select', {id: t.id});
+  parts.play.onclick = () => send('media_toggle', {id: t.id});
+  parts.slider.oninput = () => {
+    const volume = parts.slider.value / 100;
+    showLevel(parts, volume);
+    send('media_volume', {id: t.id, value: volume});
+  };
+  parts.mute.onclick = () => send('media_mute', {id: t.id, value: Number(parts.slider.value) !== 0});
+  return div;
+}
+
+function render(state) {
+  const dark = state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', dark);
+  const live = new Set(state.items.map(t => t.id));
+  for (const [id, node] of nodes) if (!live.has(id)) { node.remove(); nodes.delete(id); }
+  for (const t of state.items) {
+    if (!nodes.has(t.id)) nodes.set(t.id, items.appendChild(item(t)));
+    const {parts} = nodes.get(t.id);
+    parts.name.textContent = t.title; // textContent: page titles must never become markup here
+    parts.site.textContent = t.site;
+    parts.play.replaceChildren(icon(t.playing ? 'pause' : 'play'));
+    parts.play.title = t.playing ? 'Pause' : 'Play';
+    parts.play.setAttribute('aria-label', (t.playing ? 'Pause ' : 'Play ') + t.title);
+    parts.mute.setAttribute('aria-label', 'Mute or unmute ' + t.title);
+    parts.slider.setAttribute('aria-label', 'Volume for ' + t.title);
+    if (document.activeElement !== parts.slider) {
+      parts.slider.value = Math.round(t.volume * 100);
+      showLevel(parts, t.volume);
+    }
+  }
+  items.className = state.items.length ? '' : 'empty';
+  if (state.items.length) items.querySelector(':scope > .note')?.remove();
+  else if (!items.querySelector('.note')) {
+    const note = document.createElement('div');
+    note.className = 'note';
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = 'Nothing playing';
+    const site = document.createElement('span');
+    site.className = 'site';
+    site.textContent = 'Start a song or video in any tab';
+    note.append(name, site);
+    items.append(icon('music'), note);
+  }
+  if (state.items.length) items.querySelector(':scope > svg')?.remove();
+  document.getElementById('items').style.height = state.items.length ? '' : '100%';
+}
+addEventListener('keydown', e => { if (e.key === 'Escape') send('music_close'); });
+// Clicking anywhere else dismisses it. The delay rides out focus moving between this window and its page.
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('music_close'); }, 100));
+send('music_ready');
+</script>
+</html>

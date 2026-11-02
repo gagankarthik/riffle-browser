@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src https: http:">
+<title>Riffle toolbar</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+body.private { --strip: #141414; --bar: #242424; --ink: #f1f1f1; --hover: #3a3a3a; --line: #3f3f3f; --edge: #8e918f; --field: #141414; --muted: #d5d8d6; --off: #a0a3a1; --track: #8e918f; }
+* { box-sizing: border-box; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--strip); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+button { color: inherit; font: inherit; background: none; border: 0; padding: 0; }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: -2px; }
+#grip { position: absolute; top: 0; left: 0; right: 0; height: 4px; cursor: n-resize; z-index: 1; }
+body.maximized #grip { display: none; }
+
+#strip { display: flex; align-items: stretch; height: 36px; }
+#tabs { display: flex; gap: 2px; flex: 0 1 calc(var(--n, 1) * 222px); min-width: 0; margin: 4px 0 0 8px; overflow-x: auto; scrollbar-width: none; }
+.tab { display: flex; align-items: center; flex: 1 1 0; min-width: 44px; max-width: 220px; border-radius: 8px 8px 0 0; container-type: inline-size; }
+.tab:hover { background: var(--hover); }
+.tab.active { background: var(--bar); box-shadow: 0 -1px 6px rgb(16 40 60 / .18); font-weight: 500; }
+.tab.asleep .name { color: var(--muted); }
+/* As tabs narrow, all of them lose the same things: first the close button unless active, then the title. */
+@container (max-width: 100px) { .tab:not(.active) .x { display: none; } }
+@container (max-width: 72px) { .label, .sound { display: none !important; } .name { justify-content: center; padding: 0; } .tab.active .ico { display: none; } .tab.active .name { display: none; } .tab.active .x { flex: 1; margin: 0; background: none; } }
+.name { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding-left: 8px; text-align: left; }
+.label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sound { display: none; flex: none; color: var(--muted); }
+.sound svg.i { width: 14px; height: 14px; }
+.tab.playing .sound { display: flex; }
+.ico { position: relative; display: flex; flex: none; width: 16px; height: 16px; color: var(--muted); }
+.ico img { position: absolute; inset: 0; width: 16px; height: 16px; }
+.tab.loading .ico > * { display: none; }
+.tab.loading .ico { border: 2px solid var(--line); border-top-color: var(--tint); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .tab.loading .ico { animation: none; } }
+.x { flex: none; width: 24px; height: 24px; margin: 0 4px; border-radius: 50%; display: grid; place-items: center; }
+.x svg.i { width: 14px; height: 14px; }
+.ico svg.i { width: 16px; height: 16px; }
+.x:hover { background: var(--line); }
+#new { flex: none; align-self: center; width: 28px; height: 28px; margin: 4px 0 0 4px; border-radius: 50%; display: grid; place-items: center; }
+#new:hover { background: var(--hover); }
+#drag { flex: 1 0 24px; }
+#controls { display: flex; flex: none; }
+#controls button { width: 46px; }
+#controls svg.i { width: 14px; height: 14px; }
+#controls button:hover { background: var(--hover); }
+#controls #close:hover { background: #c42b1c; color: #fff; }
+
+#nav { display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 8px; background: var(--bar); }
+#nav button { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; }
+#nav button:hover:enabled { background: var(--hover); }
+#nav button[hidden] { display: none; }
+#nav button:disabled { color: var(--off); }
+#nav #music[aria-pressed=true] { color: var(--accent); }
+form { position: relative; flex: 1; min-width: 0; margin: 0 4px; }
+#security { position: absolute; left: 12px; top: 9px; display: flex; color: var(--muted); }
+#security svg.i { width: 14px; height: 14px; }
+#address { display: block; width: 100%; height: 32px; padding: 0 36px 0 32px; border: 1px solid var(--line); border-radius: 16px; background: var(--field); color: var(--ink); font: 14px "Segoe UI", sans-serif; user-select: text; }
+#address::placeholder { color: var(--muted); opacity: 1; }
+#address:focus { outline: 2px solid var(--tint); outline-offset: -2px; background: var(--bar); box-shadow: var(--shadow); }
+#nav #shield.stopped, #nav #star[aria-pressed=true], #nav #music[aria-pressed=true] { color: var(--accent); }
+:root.dark #nav #shield.stopped, :root.dark #nav #star[aria-pressed=true], :root.dark #nav #music[aria-pressed=true], body.private #nav #shield.stopped, body.private #nav #star[aria-pressed=true], body.private #nav #music[aria-pressed=true] { color: color-mix(in srgb, var(--accent) 45%, #fff); }
+#nav #star { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; }
+#nav #star[aria-pressed=true] { color: var(--accent); }
+
+#bar { display: none; align-items: center; gap: 4px; height: 32px; padding: 0 8px 4px; background: var(--bar); }
+body.has-bar #bar { display: flex; }
+#marks:empty::before { content: "Press the star to keep a page here"; line-height: 28px; padding: 0 8px; color: var(--muted); }
+#marks { display: flex; flex-wrap: wrap; flex: 1; min-width: 0; height: 28px; overflow: hidden; gap: 2px; }
+.mark { display: flex; align-items: center; gap: 6px; height: 28px; max-width: 170px; padding: 0 8px; border-radius: 14px; }
+.mark:hover, #all:hover { background: var(--hover); }
+#divider { flex: none; width: 1px; height: 16px; background: var(--edge); }
+#all { flex: none; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 14px; }
+#all svg.i { width: 16px; height: 16px; color: var(--tint); }
+#rule { height: 1px; background: var(--line); }
+
+@media (prefers-reduced-motion: no-preference) { button, .tab, .mark, #address { transition: background-color .12s ease-out, color .12s ease-out, box-shadow .12s ease-out; } }
+@media (max-width: 720px) {
+  #controls button { width: 38px; }
+}
+@media (max-width: 520px) {
+  #forward { display: none; }
+  .tab:not(.active) .x { display: none; }
+  #controls button { width: 32px; }
+  #nav { padding: 0 2px; }
+}
+</style>
+<!--ICONS-->
+<div id="grip"></div>
+<div id="strip">
+  <div id="tabs" role="tablist"></div>
+  <button data-i="plus" id="new" aria-label="New tab" title="New tab (Ctrl+T)"></button>
+  <div id="drag"></div>
+  <div id="controls">
+    <button data-i="minimize" id="minimize" aria-label="Minimize" title="Minimize"></button>
+    <button data-i="maximize" id="maximize" aria-label="Maximize" title="Maximize"></button>
+    <button data-i="close" id="close" aria-label="Close window" title="Close"></button>
+  </div>
+</div>
+<div id="nav">
+  <button data-i="back" id="back" aria-label="Back" title="Back (Alt+Left)"></button>
+  <button data-i="forward" id="forward" aria-label="Forward" title="Forward (Alt+Right)"></button>
+  <button data-i="reload" id="reload" aria-label="Reload" title="Reload (F5)"></button>
+  <form id="go">
+    <span id="security" role="img"></span>
+    <input id="address" aria-label="Address or search" placeholder="Search or enter address" spellcheck="false" autocomplete="off">
+    <button data-i="star" id="star" type="button" aria-label="Bookmark this page" title="Bookmark this page (Ctrl+D)"></button>
+  </form>
+  <button data-i="download" id="downloads" aria-label="Downloads" title="Downloads (Ctrl+J)"></button>
+  <button data-i="shield" id="shield" aria-label="Ad blocker" title="Ad blocker"></button>
+  <button data-i="private" id="private" aria-label="New private window" title="New private window (Ctrl+Shift+N)"></button>
+  <button data-i="music" id="music" aria-label="Music controls" title="Music controls" aria-pressed="false"></button>
+  <button data-i="menu" id="menu" aria-label="Menu" title="Menu"></button>
+</div>
+<div id="bar">
+  <div id="marks"></div>
+  <span id="divider" aria-hidden="true"></span>
+  <button id="all" title="Add, edit and sort bookmarks (Ctrl+Shift+O)">All bookmarks</button>
+</div>
+<div id="rule"></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+const address = $('address');
+const icon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+};
+for (const b of document.querySelectorAll('[data-i]')) b.append(icon(b.dataset.i));
+
+const origin = url => { try { const u = new URL(url); return /^https?:$/.test(u.protocol) ? u.origin : ''; } catch { return ''; } };
+
+function makeIcon(url, glyph, declared) {
+  const ico = document.createElement('span');
+  ico.className = 'ico';
+  ico.append(icon(glyph));
+  const site = origin(url);
+  if (site) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.onload = () => ico.querySelector('svg')?.remove();
+    const fallback = site + '/favicon.ico';
+    img.onerror = () => { if (img.getAttribute('src') === fallback) img.remove(); else img.src = fallback; };
+    img.src = origin(declared || '') ? declared : fallback;
+    ico.append(img);
+  }
+  return ico;
+}
+
+const tabNodes = new Map();
+let shownActive = null, shownMarks = null, theme = 'system', loading = false;
+
+function makeTab(id) {
+  const tab = document.createElement('div');
+  const name = document.createElement('button');
+  name.className = 'name';
+  name.setAttribute('role', 'tab');
+  name.onclick = () => send('select', {id});
+  const label = document.createElement('span');
+  label.className = 'label';
+  const sound = document.createElement('span');
+  sound.className = 'sound';
+  sound.title = 'Playing audio';
+  sound.setAttribute('role', 'img');
+  sound.setAttribute('aria-label', 'Playing audio');
+  sound.append(icon('volume'));
+  name.append(label, sound);
+  const x = document.createElement('button');
+  x.className = 'x';
+  x.append(icon('close'));
+  x.onclick = () => send('close', {id});
+  tab.onauxclick = e => { if (e.button === 1) send('close', {id}); };
+  tab.append(name, x);
+  return tab;
+}
+
+function render(state) {
+  const tabs = $('tabs');
+  tabs.style.setProperty('--n', state.tabs.length);
+  const live = new Set(state.tabs.map(t => t.id));
+  for (const [id, node] of tabNodes) if (!live.has(id)) { node.remove(); tabNodes.delete(id); }
+  for (const t of state.tabs) {
+    let tab = tabNodes.get(t.id);
+    if (!tab) { tab = makeTab(t.id); tabNodes.set(t.id, tab); tabs.append(tab); }
+    tab.className = 'tab' + (t.active ? ' active' : '') + (t.asleep ? ' asleep' : '') + (t.loading ? ' loading' : '') + (t.playing ? ' playing' : '');
+    const [name, x] = tab.children;
+    const label = name.querySelector('.label');
+    name.setAttribute('aria-selected', t.active);
+    // Private tabs never fetch an icon: this toolbar uses the normal profile and its cookies.
+    const key = t.private ? 'private' : t.icon || origin(t.url);
+    if (tab.dataset.icon !== key || !name.querySelector('.ico')) {
+      tab.dataset.icon = key;
+      name.querySelector('.ico')?.remove();
+      name.prepend(makeIcon(t.private ? '' : t.url, t.private ? 'private' : 'globe', t.private ? '' : t.icon));
+    }
+    if (label.textContent !== t.title) label.textContent = t.title; // textContent: page titles must never become markup in the toolbar
+    name.title = t.private ? t.title + ' (private)' : t.asleep ? t.title + ' (asleep to save memory, reloads when selected)' : t.title;
+    x.setAttribute('aria-label', 'Close ' + t.title);
+    x.title = 'Close tab (Ctrl+W)';
+    if (t.active && shownActive !== t.id) { shownActive = t.id; tab.scrollIntoView({inline: 'nearest', block: 'nearest'}); }
+  }
+  if (document.activeElement !== address) address.value = state.url;
+  document.body.classList.toggle('maximized', state.maximized);
+  document.body.classList.toggle('private', state.private);
+  document.body.classList.toggle('has-bar', state.bar);
+  theme = state.theme;
+  applyTheme();
+  document.documentElement.style.setProperty('--accent', state.accent);
+
+  $('back').disabled = !state.canBack;
+  $('forward').disabled = !state.canForward;
+  loading = state.loading;
+  const reload = $('reload');
+  reload.replaceChildren(icon(loading ? 'close' : 'reload'));
+  reload.title = loading ? 'Stop loading (Esc)' : 'Reload (F5)';
+  reload.setAttribute('aria-label', loading ? 'Stop loading' : 'Reload');
+  $('music').setAttribute('aria-pressed', state.playing);
+
+  const security = $('security');
+  const secure = state.url.startsWith('https://'), plain = state.url.startsWith('http://');
+  security.replaceChildren(icon(secure ? 'lock' : plain ? 'warn' : 'search'));
+  security.title = secure ? 'Connection is secure' : plain ? 'Not secure: this site does not use https' : '';
+  security.setAttribute('aria-label', security.title || 'Search');
+
+  const star = $('star');
+  star.replaceChildren(icon(state.bookmarked ? 'starred' : 'star'));
+  star.setAttribute('aria-pressed', state.bookmarked);
+  star.disabled = !state.url;
+
+  const shield = $('shield');
+  shield.hidden = !state.adblock;
+  shield.disabled = !state.url;
+  shield.classList.toggle('stopped', state.stopped);
+  shield.replaceChildren(icon(state.allowed ? 'shield-off' : 'shield'));
+  const said = !state.url ? 'Ad blocker: on' : state.allowed ? 'Ad blocker is off for this site' : state.stopped ? 'Ad blocker stopped a pop-up or redirect. Select for details' : 'Ad blocker: ' + state.blocked + ' blocked on this page. Select for details';
+  shield.title = said;
+  shield.setAttribute('aria-label', said);
+
+  const marksKey = JSON.stringify(state.bookmarks);
+  if (marksKey !== shownMarks) { // rebuilt only on change, so favicons are not refetched on every title update
+    shownMarks = marksKey;
+    $('marks').replaceChildren(...state.bookmarks.map(b => {
+      const mark = document.createElement('button');
+      mark.className = 'mark';
+      mark.title = b.title + '\n' + b.url;
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = b.title || b.url;
+      mark.append(makeIcon(b.url, 'globe', b.icon), label);
+      mark.onclick = () => send('go', {value: b.url});
+      return mark;
+    }));
+  }
+
+  const max = $('maximize');
+  max.replaceChildren(icon(state.maximized ? 'restore' : 'maximize'));
+  max.title = state.maximized ? 'Restore' : 'Maximize';
+  max.setAttribute('aria-label', max.title);
+}
+const darkMedia = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() { document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && darkMedia.matches)); }
+darkMedia.onchange = applyTheme;
+function focusAddress() { address.focus(); address.select(); }
+
+$('new').onclick = () => send('new');
+$('star').onclick = () => send('bookmark');
+$('shield').onclick = () => send('shield');
+$('menu').onclick = () => send('menu');
+$('music').onclick = () => send('music');
+$('private').onclick = () => window.ipc.postMessage('private_tab');
+$('downloads').onclick = () => send('panel', {value: 'downloads'});
+$('all').prepend(icon('folder'));
+$('all').onclick = () => send('panel', {value: 'bookmarks'});
+$('back').onclick = () => send('back');
+$('forward').onclick = () => send('forward');
+$('reload').onclick = () => send(loading ? 'stop' : 'reload');
+$('minimize').onclick = () => send('minimize');
+$('maximize').onclick = () => send('maximize');
+$('close').onclick = () => send('close_window');
+$('grip').onmousedown = () => send('resize_top');
+$('go').onsubmit = e => { e.preventDefault(); closeSuggest(); send('go', {value: address.value}); address.blur(); };
+address.onfocus = () => address.select();
+let typed = '', picks = [], pickAt = -1, suggestTimer = 0, deleting = false;
+function closeSuggest() { clearTimeout(suggestTimer); picks = []; pickAt = -1; send('suggest_close'); }
+address.oninput = e => {
+  typed = address.value;
+  deleting = (e.inputType || '').startsWith('delete');
+  clearTimeout(suggestTimer);
+  if (!typed.trim()) return closeSuggest();
+  suggestTimer = setTimeout(() => { const box = $('go').getBoundingClientRect(); send('suggest', {value: typed, x: box.left, w: box.width}); }, 120);
+};
+function gotSuggestions(query, items) {
+  if (query !== typed || document.activeElement !== address) return;
+  picks = items;
+  pickAt = -1;
+  // Finishes the address as selected text, so the next key press replaces it. Never after deleting, or the text would come back.
+  const rest = items[0]?.complete?.slice(typed.length);
+  if (!deleting && rest && address.value === typed) { address.value = typed + rest; address.setSelectionRange(typed.length, address.value.length); }
+}
+address.onkeydown = e => {
+  if (!picks.length) return;
+  if (e.key === 'Escape') { address.value = typed; closeSuggest(); return; }
+  const by = {ArrowDown: 1, ArrowUp: -1}[e.key];
+  if (!by) return;
+  e.preventDefault();
+  pickAt = pickAt + by < -1 ? picks.length - 1 : pickAt + by >= picks.length ? -1 : pickAt + by;
+  address.value = pickAt < 0 ? typed : picks[pickAt].url || picks[pickAt].text;
+  send('suggest_mark', {value: pickAt});
+};
+address.onblur = () => setTimeout(() => { if (document.activeElement !== address) closeSuggest(); }, 150); // lets a press on the list arrive first
+// The empty part of the tab row moves the window, as a title bar would.
+for (const area of [$('drag')]) {
+  area.onmousedown = e => { if (e.button === 0) send(e.detail === 2 ? 'maximize' : 'drag'); };
+}
+$('tabs').onwheel = e => { $('tabs').scrollLeft += e.deltaY; };
+send('ready');
+</script>
+</html>

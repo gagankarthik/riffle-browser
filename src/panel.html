@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle</title>
+<style>
+:root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 16%, #eef1f4); --page: color-mix(in srgb, var(--accent) 7%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
+:root.dark { --strip: color-mix(in srgb, var(--accent) 14%, #15191c); --page: color-mix(in srgb, var(--accent) 7%, #1a1e21); --bar: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --hover: color-mix(in srgb, var(--accent) 34%, transparent); --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --field: color-mix(in srgb, var(--accent) 6%, #171b1e); --muted: #c3ccd2; --off: #a8b2b9; --track: #8b949a; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 22px rgb(0 0 0 / .35); color-scheme: dark; }
+* { box-sizing: border-box; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+html, body { margin: 0; height: 100%; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; }
+body { display: flex; }
+nav { flex: none; display: flex; flex-direction: column; gap: 4px; width: 220px; padding: 16px 12px; background: var(--strip); overflow-y: auto; position: relative; z-index: 1; box-shadow: 1px 0 10px rgb(16 40 60 / .12); }
+#brand { display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px; font-size: 18px; font-weight: 700; }
+#brand svg { width: 28px; height: 28px; flex: none; }
+nav button { flex: none; display: flex; align-items: center; gap: 12px; width: 100%; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; }
+nav button:hover { background: var(--hover); }
+nav button[aria-current=page], nav button[aria-current=page]:hover { background: var(--fill); color: #fff; font-weight: 600; box-shadow: var(--shadow); }
+nav button[aria-current=page] svg.i { color: inherit; }
+#done { margin-top: auto; }
+main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px; background: var(--page); }
+main > * { max-width: 720px; margin-inline: auto; }
+h1 { font-size: 26px; font-weight: 700; margin: 0 0 20px; }
+.head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+input[type=search], input[type=text], input[type=number], select { height: 32px; padding: 0 10px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: inherit; font: inherit; }
+input[type=search] { flex: 1; min-width: 0; }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+button.plain { height: 32px; padding: 0 12px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: inherit; }
+button.plain:hover { background: var(--hover); }
+.row { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+.open { flex: 1; min-width: 0; padding: 8px 6px; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.open:hover { background: var(--strip); }
+.open span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sub { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.remove { flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; color: inherit; display: grid; place-items: center; }
+.remove:hover { background: var(--hover); }
+.empty { color: var(--muted); }
+.field { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.field label { flex: 1 1 240px; }
+.field .sub { display: block; }
+.field input[type=text], .field select { width: 280px; max-width: 100%; }
+.field input[type=number] { width: 80px; }
+input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+input::placeholder { color: var(--muted); opacity: 1; }
+input[type=color] { width: 48px; height: 32px; padding: 2px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); }
+#mark-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+#mark-form input { flex: 1 1 180px; min-width: 0; }
+.error { flex-basis: 100%; margin: 0; font-weight: 600; }
+.remove:disabled { color: var(--off); }
+/* Dropdowns, toggles, stepper, swatches and confirm dialog: Riffle's own, so they follow the theme. */
+.pick { position: relative; width: 280px; max-width: 100%; }
+.pick-button { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 32px; padding: 0 8px 0 12px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: inherit; font: inherit; text-align: left; }
+.pick-button:hover { background: var(--hover); }
+.pick-list { position: absolute; z-index: 2; top: 36px; left: 0; right: 0; padding: 4px 0; border: 1px solid var(--edge); border-radius: 8px; background: var(--bar); }
+.pick-list button { display: block; width: 100%; height: 32px; padding: 0 12px; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.pick-list button:hover, .pick-list button:focus { background: var(--hover); outline: none; }
+.pick-list button[aria-selected=true] { font-weight: 500; }
+input[type=checkbox] { appearance: none; position: relative; flex: none; width: 36px; height: 20px; margin: 0; border: 1px solid var(--edge); border-radius: 10px; background: var(--bar); }
+input[type=checkbox]::before { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--edge); transition: transform .12s ease-out; }
+input[type=checkbox]:checked { border-color: var(--fill); background: var(--fill); }
+input[type=checkbox]:checked::before { background: #fff; transform: translateX(16px); }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; }
+.stepper button:hover { background: var(--hover); }
+.stepper svg.i { width: 14px; height: 14px; }
+.stepper input { width: 48px !important; padding: 0 !important; text-align: center; appearance: textfield; font-variant-numeric: tabular-nums; }
+.stepper input::-webkit-inner-spin-button { appearance: none; }
+.swatches { display: flex; align-items: center; gap: 8px; }
+.swatch { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; }
+.swatch[aria-pressed=true] { box-shadow: 0 0 0 2px var(--bar), 0 0 0 4px var(--ink); }
+input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+#confirm { position: fixed; z-index: 3; inset: 0; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / .45); }
+#confirm-box { width: min(400px, 100%); padding: 24px; border: 1px solid var(--edge); border-radius: 12px; background: var(--bar); }
+#confirm-box h2 { margin: 0 0 8px; font-size: 16px; font-weight: 500; }
+#confirm-box p { margin: 0 0 24px; color: var(--muted); line-height: 20px; }
+#confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+#confirm-yes { border-color: #c42b1c; background: #c42b1c; color: #fff; }
+#confirm-yes:hover { background: #a82315; }
+#sites { flex: 1 1 280px; min-width: 0; }
+.site-row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.site-row span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+nav svg.i { flex: none; width: 16px; height: 16px; color: var(--tint); }
+.sec, #rows { margin-bottom: 16px; padding: 4px 20px; border-radius: 12px; background: var(--bar); box-shadow: var(--shadow); }
+.sec > .field:last-child, #rows > .row:last-child { border-bottom: 0; }
+.sec h2 { margin: 16px 0 4px; font-size: 13px; font-weight: 700; color: var(--tint); }
+.field label { font-size: 14px; font-weight: 500; }
+.field label[for] { cursor: default; align-self: stretch; }
+.field label .sub { margin-top: 2px; font-weight: 400; }
+.open:hover { background: var(--hover); border-radius: 8px; }
+button.plain { transition: box-shadow .12s ease-out; }
+button.plain:hover { box-shadow: var(--shadow); }
+button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow: none; }
+#make-default:enabled, #mark-save { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
+.pick-list, #confirm-box { box-shadow: var(--shadow); }
+[hidden] { display: none !important; }
+@media (max-width: 560px) { nav { width: 128px; } main { padding: 16px; } }
+@media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
+</style>
+<!--ICONS-->
+<nav aria-label="Browser pages">
+  <div id="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.8 9 0t9 0M7 21q4.5-4.8 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg>Riffle</div>
+  <button data-page="bookmarks">Bookmarks</button>
+  <button data-page="history">History</button>
+  <button data-page="downloads">Downloads</button>
+  <button data-page="settings">Settings</button>
+  <button data-sec="general">General</button>
+  <button data-sec="search">Search engine</button>
+  <button data-sec="browser">Default browser</button>
+  <button data-sec="files">Downloads</button>
+  <button id="done">Back to page</button>
+</nav>
+<main>
+  <section id="list" hidden>
+    <h1 id="heading"></h1>
+    <div class="head">
+      <input id="filter" type="search" aria-label="Search this list" placeholder="Search">
+      <button class="plain" id="clear-history">Clear history</button>
+      <button class="plain" id="clear-downloads">Clear list</button>
+    </div>
+    <form id="mark-form" aria-label="Bookmark details">
+      <input id="mark-title" type="text" aria-label="Bookmark name" placeholder="Name">
+      <input id="mark-url" type="text" aria-label="Bookmark address" placeholder="Address" spellcheck="false">
+      <button class="plain" id="mark-save">Add</button>
+      <button class="plain" id="mark-cancel" type="button" hidden>Cancel</button>
+      <p id="mark-error" class="error" role="alert" hidden></p>
+    </form>
+    <div id="rows"></div>
+  </section>
+  <section id="settings" hidden>
+    <h1 id="sec-title">Settings</h1>
+    <form id="form">
+      <div id="sec-search" class="sec">
+      <div class="field"><label for="engine">Search engine</label>
+        <select id="engine">
+          <option value="https://duckduckgo.com/?k1=-1&q=">DuckDuckGo (ads off)</option>
+          <option value="https://search.brave.com/search?q=">Brave Search</option>
+          <option value="https://www.startpage.com/do/search?q=">Startpage</option>
+          <option value="https://www.google.com/search?q=">Google</option>
+          <option value="https://www.bing.com/search?q=">Bing</option>
+          <option value="custom">Custom</option>
+        </select></div>
+      <div class="field" id="custom-row"><label for="custom">Custom search address<span class="sub">An https address that ends where the search words go</span></label>
+        <input id="custom" type="text" spellcheck="false" placeholder="https://example.com/?q="></div>
+      <div class="field"><label for="search_suggest">Suggest searches as I type<span class="sub">Sends what you type, but not web addresses, to your search engine. Never used in private windows</span></label><input id="search_suggest" type="checkbox"></div>
+      </div>
+      <div id="sec-files" class="sec">
+      <div class="field"><label>Location<span class="sub" id="download-dir"></span></label><button class="plain" id="download-change" type="button">Change</button></div>
+      <div class="field"><label for="download_ask">Ask where to save each file before downloading</label><input id="download_ask" type="checkbox"></div>
+      <div class="field"><label for="download_show">Show downloads when they're done<span class="sub">A small note under the toolbar, which closes itself</span></label><input id="download_show" type="checkbox"></div>
+      </div>
+      <div id="sec-general" class="sec">
+      <h2>Appearance</h2>
+      <div class="field"><label for="theme">Theme</label>
+        <select id="theme"><option value="system">Same as Windows</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+      <div class="field"><label for="accent">Accent colour</label><input id="accent" type="color"></div>
+      <h2>Startup</h2>
+      <div class="field"><label for="home">New tab page<span class="sub">Empty for a blank tab</span></label>
+        <input id="home" type="text" spellcheck="false" placeholder="https://example.com"></div>
+      <div class="field"><label for="restore">Reopen my tabs on startup<span class="sub">Private tabs are never reopened</span></label><input id="restore" type="checkbox"></div>
+      <div class="field"><label for="bookmarks_bar">Show bookmarks bar</label><input id="bookmarks_bar" type="checkbox"></div>
+      <h2>Privacy and memory</h2>
+      <div class="field"><label for="adblock">Block ads and trackers<span class="sub">Takes effect after restarting Riffle</span></label><input id="adblock" type="checkbox"></div>
+      <div class="field"><label for="idle_sleep">Sleep tabs left idle for 5 minutes<span class="sub">Saves memory. Text typed but not sent in a sleeping tab is lost. Tabs playing music stay awake</span></label><input id="idle_sleep" type="checkbox"></div>
+      <div class="field"><label for="max">Tabs kept awake<span class="sub">Fewer uses less memory. Others reload when selected</span></label><input id="max" type="number" min="1" max="32"></div>
+      </div>
+    </form>
+    <div id="sec-browser" class="sec">
+    <div class="field"><label>Default browser<span class="sub" id="default-note"></span></label><button class="plain" id="make-default">Make default</button></div>
+    </div>
+    <div id="sec-general-more" class="sec">
+    <h2>App and data</h2>
+    <div class="field" id="sites-row"><label>Site exceptions<span class="sub">Sites you changed from the shield button</span></label><div id="sites"></div></div>
+    <div class="field"><label>Riffle app<span class="sub" id="app-note"></span></label><button class="plain" id="app-action"></button></div>
+    <div class="field"><label>Browsing data<span class="sub">History, cookies, logins and cache. Bookmarks and settings are kept</span></label>
+      <button class="plain" id="clear-data">Clear browsing data</button></div>
+    </div>
+  </section>
+</main>
+<div id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text" hidden>
+  <div id="confirm-box">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div id="confirm-actions"><button class="plain" id="confirm-no">Cancel</button><button class="plain" id="confirm-yes"></button></div>
+  </div>
+</div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const $ = id => document.getElementById(id);
+const icon = name => {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.append(use);
+  return svg;
+};
+const ROW_LIMIT = 500; // the search box reaches older entries without building thousands of rows
+let state = null, theme = 'system';
+const darkMedia = matchMedia('(prefers-color-scheme: dark)');
+const applyTheme = () => document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && darkMedia.matches));
+darkMedia.onchange = applyTheme;
+
+function row(entry, removable) {
+  const div = document.createElement('div');
+  div.className = 'row';
+  const open = document.createElement('button');
+  open.className = 'open';
+  const title = document.createElement('span');
+  title.textContent = entry.title || entry.url; // textContent: page titles must never become markup here
+  const sub = document.createElement('span');
+  sub.className = 'sub';
+  sub.textContent = (entry.time ? new Date(entry.time * 1000).toLocaleString() + '  ' : '') + entry.url;
+  open.append(title, sub);
+  open.onclick = () => send('go', {value: entry.url});
+  div.append(open);
+  if (removable) {
+    const name = entry.title || entry.url;
+    const action = (glyph, label, onclick, disabled) => {
+      const b = document.createElement('button');
+      b.className = 'remove';
+      b.append(icon(glyph));
+      b.title = label;
+      b.setAttribute('aria-label', label + ': ' + name);
+      b.disabled = disabled;
+      b.onclick = onclick;
+      div.append(b);
+    };
+    const at = state.bookmarks.indexOf(entry);
+    action('up', 'Move up', () => send('move_bookmark', {value: entry.url, up: true}), at === 0);
+    action('down', 'Move down', () => send('move_bookmark', {value: entry.url, up: false}), at === state.bookmarks.length - 1);
+    action('edit', 'Edit', () => editMark(entry), false);
+    action('close', 'Remove', () => send('remove_bookmark', {value: entry.url}), false);
+  }
+  if (!removable) {
+    const x = document.createElement('button');
+    x.className = 'remove';
+    x.append(icon('close'));
+    x.title = 'Remove from history';
+    x.setAttribute('aria-label', 'Remove from history: ' + (entry.title || entry.url));
+    x.onclick = () => send('remove_history', {value: entry.url, time: entry.time});
+    div.append(x);
+  }
+  return div;
+}
+
+function showDownloads() {
+  const needle = $('filter').value.toLowerCase();
+  const words = {downloading: 'Downloading', done: 'Finished', failed: 'Failed', interrupted: 'Stopped when Riffle closed'};
+  const rows = state.downloads.filter(d => (d.file + ' ' + d.url).toLowerCase().includes(needle)).slice(0, ROW_LIMIT).map(d => {
+    const div = document.createElement('div');
+    div.className = 'row';
+    const text = document.createElement('div');
+    text.className = 'open';
+    const name = document.createElement('span');
+    name.textContent = d.file; // textContent: file names come from websites
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = words[d.state] + '  ' + new Date(d.time * 1000).toLocaleString() + '  ' + d.url;
+    text.append(name, sub);
+    div.append(text);
+    const action = (glyph, label, cmd) => {
+      const b = document.createElement('button');
+      b.className = 'remove';
+      b.append(icon(glyph));
+      b.title = label;
+      b.setAttribute('aria-label', label + ': ' + d.file);
+      b.onclick = () => send(cmd, {value: d.path});
+      div.append(b);
+    };
+    if (d.state === 'done') action('folder', 'Show in folder', 'show_download');
+    action('close', 'Remove from list', 'remove_download');
+    return div;
+  });
+  if (!rows.length) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = needle ? 'Nothing matches.' : 'No downloads yet.';
+    rows.push(p);
+  }
+  $('rows').replaceChildren(...rows);
+}
+
+function showExceptions() {
+  const rows = [];
+  for (const [key, what] of [['allow_sites', 'Ad blocking off'], ['allow_popups', 'Pop-ups allowed']]) {
+    for (const site of state.settings[key]) {
+      const row = document.createElement('div');
+      row.className = 'site-row';
+      const name = document.createElement('span');
+      name.textContent = site;
+      const kind = document.createElement('span');
+      kind.className = 'sub';
+      kind.textContent = what;
+      const x = document.createElement('button');
+      x.className = 'remove';
+      x.type = 'button';
+      x.append(icon('close'));
+      x.title = 'Remove';
+      x.setAttribute('aria-label', 'Remove ' + what + ' for ' + site);
+      x.onclick = () => { state.settings[key] = state.settings[key].filter(s => s !== site); save(); };
+      row.append(name, kind, x);
+      rows.push(row);
+    }
+  }
+  $('sites').replaceChildren(...rows);
+  $('sites-row').hidden = !rows.length;
+}
+
+function showList() {
+  if (state.page === 'downloads') return showDownloads();
+  const bookmarks = state.page === 'bookmarks';
+  const needle = $('filter').value.toLowerCase();
+  const all = bookmarks ? state.bookmarks : state.history;
+  const found = all.filter(e => (e.title + ' ' + e.url).toLowerCase().includes(needle));
+  const rows = found.slice(0, ROW_LIMIT).map(e => row(e, bookmarks));
+  if (!rows.length) {
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = needle ? 'Nothing matches.' : bookmarks ? 'No bookmarks yet. Add one above, or press Ctrl+D on a page.' : 'No history yet.';
+    rows.push(p);
+  }
+  $('rows').replaceChildren(...rows);
+}
+
+let editing = null;
+function editMark(entry) {
+  editing = entry ? entry.url : null;
+  $('mark-title').value = entry ? entry.title : '';
+  $('mark-url').value = entry ? entry.url : '';
+  $('mark-save').textContent = entry ? 'Save' : 'Add';
+  $('mark-cancel').hidden = !entry;
+  $('mark-error').hidden = true;
+  if (entry) $('mark-title').focus();
+}
+function showFormError(text) {
+  $('mark-error').textContent = text;
+  $('mark-error').hidden = false;
+  $('mark-url').focus();
+}
+
+function ask(title, text, yes, action) {
+  const opener = document.activeElement;
+  $('confirm-title').textContent = title;
+  $('confirm-text').textContent = text;
+  $('confirm-yes').textContent = yes;
+  $('confirm').hidden = false;
+  $('confirm-no').focus(); // the safe choice has focus, so Enter never destroys anything by accident
+  const close = run => { $('confirm').hidden = true; opener?.focus(); if (run) action(); };
+  $('confirm-no').onclick = () => close(false);
+  $('confirm-yes').onclick = () => close(true);
+  $('confirm').onkeydown = e => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(false); }
+    if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === $('confirm-no') ? $('confirm-yes') : $('confirm-no')).focus(); }
+  };
+}
+
+// Draws a themed dropdown over a hidden <select>, which stays the source of the value and fires the same change event.
+function makePick(select) {
+  select.hidden = true;
+  const pick = document.createElement('div');
+  pick.className = 'pick';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'pick-button';
+  button.id = select.id + '-pick';
+  button.setAttribute('aria-haspopup', 'listbox');
+  button.setAttribute('aria-expanded', 'false');
+  const text = document.createElement('span');
+  button.append(text, icon('chevron'));
+  const label = document.querySelector(`label[for=${select.id}]`);
+  label.htmlFor = button.id;
+  const list = document.createElement('div');
+  list.className = 'pick-list';
+  list.setAttribute('role', 'listbox');
+  list.hidden = true;
+  const close = focus => { list.hidden = true; button.setAttribute('aria-expanded', 'false'); if (focus) button.focus(); };
+  const refresh = () => { text.textContent = select.selectedOptions[0]?.textContent ?? ''; };
+  for (const option of select.options) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('role', 'option');
+    row.textContent = option.textContent;
+    row.onclick = () => {
+      select.value = option.value;
+      refresh();
+      close(true);
+      select.dispatchEvent(new Event('change', {bubbles: true}));
+    };
+    list.append(row);
+  }
+  button.onclick = () => {
+    const opening = list.hidden;
+    document.querySelectorAll('.pick-list').forEach(l => { l.hidden = true; });
+    list.hidden = !opening;
+    button.setAttribute('aria-expanded', opening);
+    if (opening) {
+      for (const row of list.children) row.setAttribute('aria-selected', row.textContent === text.textContent);
+      (list.querySelector('[aria-selected=true]') || list.firstChild).focus();
+    }
+  };
+  pick.onkeydown = e => {
+    if (list.hidden) return;
+    if (e.key === 'Escape') { e.stopPropagation(); close(true); }
+    if (e.key === 'Tab') close(false);
+    const rows = [...list.children], at = rows.indexOf(document.activeElement);
+    const next = {ArrowDown: Math.min(at + 1, rows.length - 1), ArrowUp: Math.max(at - 1, 0)}[e.key];
+    if (next !== undefined) { e.preventDefault(); rows[next].focus(); }
+  };
+  document.addEventListener('click', e => { if (!pick.contains(e.target)) close(false); });
+  select.after(pick);
+  pick.append(button, list);
+  return refresh;
+}
+const refreshPicks = [makePick($('theme')), makePick($('engine'))];
+
+// Number stepper
+const stepper = document.createElement('div');
+stepper.className = 'stepper';
+$('max').after(stepper);
+const step = (name, label, by) => {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.setAttribute('aria-label', label);
+  b.title = label;
+  b.append(icon(name));
+  b.onclick = () => { $('max').value = Math.min(32, Math.max(1, Number($('max').value) + by)); save(); };
+  return b;
+};
+stepper.append(step('minus', 'Fewer tabs', -1), $('max'), step('plus', 'More tabs', 1));
+
+// Accent swatches, with the colour picker beside them for anything else
+const SWATCHES = [['#0b6e8f', 'Teal'], ['#b4770c', 'Gold'], ['#1a73e8', 'Blue'], ['#188038', 'Green'], ['#c5221f', 'Red'], ['#9334e6', 'Purple'], ['#5f6368', 'Grey']];
+const swatches = document.createElement('div');
+swatches.className = 'swatches';
+$('accent').after(swatches);
+for (const [color, name] of SWATCHES) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'swatch';
+  b.dataset.color = color;
+  b.style.background = color;
+  b.title = name;
+  b.setAttribute('aria-label', name);
+  b.onclick = () => { $('accent').value = color; save(); };
+  swatches.append(b);
+}
+$('accent').title = 'Choose any colour';
+swatches.append($('accent'));
+
+function showSettings(s) {
+  state.settings = s;
+  theme = s.theme;
+  applyTheme();
+  document.documentElement.style.setProperty('--accent', s.accent);
+  $('theme').value = s.theme;
+  $('accent').value = s.accent;
+  const preset = [...$('engine').options].some(o => o.value === s.search);
+  $('engine').value = preset ? s.search : 'custom';
+  $('custom').value = preset ? '' : s.search;
+  $('custom-row').hidden = preset;
+  $('home').value = s.home;
+  $('restore').checked = s.restore;
+  $('bookmarks_bar').checked = s.bookmarks_bar;
+  $('idle_sleep').checked = s.idle_sleep;
+  $('adblock').checked = s.adblock;
+  $('max').value = s.max_live_tabs;
+  $('download-dir').textContent = s.download_dir;
+  $('search_suggest').checked = s.search_suggest;
+  $('download_ask').checked = s.download_ask;
+  $('download_show').checked = s.download_show;
+  refreshPicks.forEach(f => f());
+  showExceptions();
+  for (const b of document.querySelectorAll('.swatch')) b.setAttribute('aria-pressed', b.dataset.color === s.accent);
+}
+
+let section = 'general';
+function showSection() {
+  for (const el of document.querySelectorAll('.sec')) el.hidden = !el.id.startsWith('sec-' + section);
+  for (const b of document.querySelectorAll('nav [data-sec]')) {
+    if (b.dataset.sec === section) { b.setAttribute('aria-current', 'page'); $('sec-title').textContent = b.textContent; } else b.removeAttribute('aria-current');
+  }
+}
+
+function render(next) {
+  state = next;
+  showSettings(next.settings);
+  for (const b of document.querySelectorAll('nav [data-page]')) {
+    if (b.dataset.page === next.page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+  const settings = next.page === 'settings';
+  for (const b of document.querySelectorAll('nav [data-page]')) b.hidden = settings;
+  for (const b of document.querySelectorAll('nav [data-sec]')) b.hidden = !settings;
+  showSection();
+  $('make-default').hidden = next.default_browser;
+  $('make-default').textContent = next.installed ? 'Make default' : 'Install Riffle';
+  $('default-note').textContent = next.default_browser ? 'Riffle is your default browser' : next.installed ? 'Windows opens its settings page, where you confirm Riffle' : 'Windows can only offer Riffle as a browser once it is installed';
+  $('app-note').textContent = next.installed ? 'Installed for this Windows user. You can also remove it from Windows Settings, Apps' : 'Adds Riffle to the Start menu and Windows Apps. No administrator rights needed';
+  $('app-action').textContent = next.installed ? 'Uninstall Riffle' : 'Install Riffle';
+  $('app-action').onclick = () => next.installed ? send('uninstall_app') : send('install_app');
+  $('settings').hidden = !settings;
+  $('list').hidden = settings;
+  if (!settings) {
+    $('heading').textContent = {bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads'}[next.page];
+    $('clear-downloads').hidden = next.page !== 'downloads';
+    $('clear-history').hidden = next.page !== 'history';
+    $('mark-form').hidden = next.page !== 'bookmarks';
+    editMark(null);
+    showList();
+  }
+}
+
+for (const b of document.querySelectorAll('nav [data-page]')) {
+  b.onclick = () => { $('filter').value = ''; send('panel', {value: b.dataset.page}); };
+}
+for (const b of document.querySelectorAll('nav [data-sec]')) b.onclick = () => { section = b.dataset.sec; showSection(); };
+for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
+$('make-default').onclick = () => send(state.installed ? 'make_default' : 'install_app');
+$('download-change').onclick = () => send('choose_download_dir');
+$('mark-cancel').onclick = () => editMark(null);
+$('mark-form').onsubmit = e => {
+  e.preventDefault();
+  send('put_bookmark', {old: editing, title: $('mark-title').value, url: $('mark-url').value});
+};
+for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
+$('done').prepend(icon('back'));
+$('done').onclick = () => send('close_panel');
+$('filter').oninput = showList;
+$('clear-history').onclick = () => ask('Clear all history?', 'Every page in your history will be removed.', 'Clear history', () => send('clear_history'));
+$('clear-downloads').onclick = () => send('clear_downloads');
+$('clear-data').onclick = () => ask('Clear browsing data?', 'This removes history, cookies, logins and cache. You will be signed out of websites.', 'Clear data', () => send('clear_data'));
+$('engine').onchange = () => {
+  // Choosing Custom waits for an address, since there is nothing valid to save yet.
+  if ($('engine').value === 'custom') { $('custom-row').hidden = false; $('custom').focus(); } else save();
+};
+$('form').onchange = e => { if (e.target !== $('engine')) save(); };
+$('form').onsubmit = e => { e.preventDefault(); save(); };
+function save() {
+  const engine = $('engine').value;
+  send('settings', {value: {
+    allow_sites: state.settings.allow_sites,
+    allow_popups: state.settings.allow_popups,
+    theme: $('theme').value,
+    accent: $('accent').value,
+    search: engine === 'custom' ? $('custom').value.trim() : engine,
+    home: $('home').value,
+    restore: $('restore').checked,
+    bookmarks_bar: $('bookmarks_bar').checked,
+    idle_sleep: $('idle_sleep').checked,
+    adblock: $('adblock').checked,
+    max_live_tabs: Number($('max').value),
+    download_dir: state.settings.download_dir,
+    search_suggest: $('search_suggest').checked,
+    download_ask: $('download_ask').checked,
+    download_show: $('download_show').checked,
+  }});
+}
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('confirm').hidden) send('close_panel'); });
+send('panel_ready');
+</script>
+</html>

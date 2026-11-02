@@ -1,0 +1,22 @@
+# Push a tag like v0.1.0 to build the installer and publish it as a GitHub release.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp target/release/riffle-browser.exe RiffleSetup.exe
+          sha256sum RiffleSetup.exe > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" RiffleSetup.exe SHA256SUMS.txt --generate-notes
