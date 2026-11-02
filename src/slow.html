@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle slow page</title>
+<style>
+:root { --bar: #fff; --ink: #14212b; --muted: #46555f; --hover: #e4edf1; --edge: #6d8791; --warn: #8a5300; --warn-bg: #fdf0d9; --fill: #0b6e8f; color-scheme: light; }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --muted: #c3ccd2; --hover: #3a4a52; --edge: #8b949a; --warn: #f5c66b; --warn-bg: #4a3a1c; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px/18px "Segoe UI", sans-serif; user-select: none; }
+body { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 12px; align-content: space-between; padding: 14px 16px; }
+#mark { padding-top: 2px; color: var(--warn); }
+#mark svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+strong { display: block; font-size: 14px; line-height: 20px; font-weight: 600; }
+span { color: var(--muted); }
+.actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+button { height: 32px; padding: 0 14px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: inherit; transition: background-color .12s ease-out; }
+button:hover { background: var(--hover); }
+button.main { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
+button.main:hover { background: #085770; }
+:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+<div id="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+<div role="status"><strong>This page is taking a while</strong><span>Your connection may be slow, or the site may be busy.</span></div>
+<div class="actions"><button id="stop">Stop loading</button><button id="wait" class="main">Keep waiting</button></div>
+<script>
+const send = cmd => window.ipc.postMessage(JSON.stringify({cmd}));
+document.getElementById('wait').onclick = () => send('slow_close');
+document.getElementById('stop').onclick = () => send('slow_stop');
+function render(state) { document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)); }
+send('slow_ready');
+</script>
+</html>

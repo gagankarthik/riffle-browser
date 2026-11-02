@@ -30,6 +30,7 @@ input:checked::before { background: #fff; transform: translateX(16px); }
 <section id="head">
   <h1 id="count"></h1>
   <span class="sub" id="site"></span>
+  <span class="sub" id="month"></span>
   <p>Riffle blocks ads, trackers, unwanted pop-ups and redirects before they load.</p>
 </section>
 <section id="redirect" hidden>
@@ -62,6 +63,8 @@ function render(state) {
   document.documentElement.classList.toggle('dark', dark);
   $('count').textContent = state.blocked === 1 ? '1 item blocked on this page' : state.blocked + ' items blocked on this page';
   $('site').textContent = state.site;
+  $('month').textContent = state.month ? state.month.toLocaleString() + ' blocked this month, counted only on this PC' : '';
+  $('month').hidden = !state.month;
   $('redirect').hidden = !state.target;
   $('target').textContent = state.target; // textContent: this address comes from a web page
   $('target').title = state.target;

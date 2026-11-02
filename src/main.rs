@@ -19,11 +19,13 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use webview2_com::Microsoft::Web::WebView2::Win32::*;
 use webview2_com::{WebResourceRequestedEventHandler, take_pwstr};
-use webview2_com::{AcceleratorKeyPressedEventHandler, AddScriptToExecuteOnDocumentCreatedCompletedHandler, ContainsFullScreenElementChangedEventHandler, GetProcessExtendedInfosCompletedHandler, NavigationStartingEventHandler};
+use webview2_com::{AcceleratorKeyPressedEventHandler, AddScriptToExecuteOnDocumentCreatedCompletedHandler, BrowserExtensionEnableCompletedHandler, BrowserExtensionRemoveCompletedHandler, CallDevToolsProtocolMethodCompletedHandler, ContainsFullScreenElementChangedEventHandler, GetProcessExtendedInfosCompletedHandler, NavigationCompletedEventHandler, NavigationStartingEventHandler, ProcessFailedEventHandler, ProfileAddBrowserExtensionCompletedHandler, ProfileGetBrowserExtensionsCompletedHandler};
 use windows::Win32::Foundation::{COLORREF, CloseHandle, HWND};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX};
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender};
+use windows::Win32::System::Com::{CLSCTX_ALL, CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::Foundation::{LPARAM, RECT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, EnumWindows, FindWindowExW, GWL_EXSTYLE, GWL_STYLE, GetWindowLongPtrW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, HWND_TOP, IsWindow, IsWindowVisible, PostMessageW, SW_HIDE, SW_SHOWNOACTIVATE, SWP_FRAMECHANGED, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, LWA_ALPHA, SetLayeredWindowAttributes, WS_EX_LAYERED, CHILDID_SELF, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_SHOW, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT, SetParent, SetWindowLongPtrW, SetWindowPos, ShowWindow, WINDOW_EX_STYLE, WM_CLOSE, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_POPUP, WS_THICKFRAME};
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
@@ -40,7 +42,6 @@ const TOOLBAR_HEIGHT: f64 = 81.0;
 const BOOKMARKS_BAR_HEIGHT: f64 = 32.0;
 const NAV_ROW_BOTTOM: f64 = 80.0; // tab row plus address row in toolbar.html
 const MENU_BUTTON_RIGHT: f64 = 8.0; // distance from the menu button's right edge to the window's
-const MUSIC_BUTTON_RIGHT: f64 = 44.0; // distance from the music button's right edge to the window's
 const DEFAULT_LIVE_TABS: u64 = 3; // the rest sleep and free their memory until selected
 const SEARCH_URL: &str = "https://duckduckgo.com/?k1=-1&q="; // k1=-1 turns off DuckDuckGo's own ads
 const AGENT_PORT: u16 = 9222;
@@ -54,13 +55,28 @@ const MENU_HTML: &str = include_str!("menu.html");
 const SHIELD_HTML: &str = include_str!("shield.html");
 const BOOKMARK_HTML: &str = include_str!("bookmark.html");
 const ZOOM_HTML: &str = include_str!("zoom.html");
+const TAB_MENU_HTML: &str = include_str!("tabmenu.html");
+const MARKS_HTML: &str = include_str!("marks.html");
+const TAB_SEARCH_HTML: &str = include_str!("tabsearch.html");
+const ERROR_HTML: &str = include_str!("error.html");
+const SLOW_HTML: &str = include_str!("slow.html");
+const SLOW_SECS: u64 = 12; // a page with nothing to show after this long gets a note
+const SLOW_NOTE: (f64, f64) = (380.0, 120.0);
+const WELCOME_HTML: &str = include_str!("welcome.html");
+const WELCOME_URL: &str = "riffle:welcome";
+const WELCOME_FOR: &str = "0.4"; // change when welcome.html lists new features, and it shows once more
+const READER_JS: &str = include_str!("reader.js");
+const TAB_MENU_SIZE: (f64, f64) = (220.0, 208.0);
+const TAB_SEARCH_SIZE: (f64, f64) = (480.0, 380.0);
+const MARKS_WIDTH: f64 = 280.0;
+const IMPORT_LIMIT: usize = 5000;
 const ZOOM_POPUP: (f64, f64) = (248.0, 52.0);
 const ZOOM_LEVELS: &[f64] = &[0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]; // the steps Chrome and Edge use
 const BOOKMARK_WIDTH: f64 = 340.0;
-const STAR_BUTTON_RIGHT: f64 = 186.0; // distance from the star's right edge to the window's
-const ZOOM_BUTTON_RIGHT: f64 = 214.0; // the magnifier beside the star, which the zoom dialog hangs from
+const DOWNLOAD_ICON_SECS: u64 = 300; // how long the toolbar icon stays after a download ends. The menu always has Downloads
+const TOOLBAR_BUTTON: f64 = 36.0; // each icon's width and gap
+const ADDRESS_ICON: f64 = 28.0; // each icon inside the address bar
 const SHIELD_WIDTH: f64 = 320.0;
-const SHIELD_BUTTON_RIGHT: f64 = 116.0; // distance from the shield button's right edge to the window's
 const MUSIC_WIDTH: f64 = 320.0;
 const IDLE_SLEEP_SECS: u64 = 300; // background tabs untouched this long release their memory
 const IDLE_CHECK_SECS: u64 = 60;
@@ -107,6 +123,7 @@ const VOUCH_SECS: u64 = 5; // what the user asked for directly, including the re
 const FILTER_MAX_AGE_SECS: u64 = 4 * 24 * 60 * 60; // the lists themselves ask to be refetched every 4 days
 const MIN_FILTER_LIST_BYTES: usize = 20_000;
 
+static BLOCKED_NOW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0); // not yet saved to stats.json
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 static SEED_ENGINE: OnceLock<Engine> = OnceLock::new();
 // $popup rules, which name the sites ads redirect to. The engine has no such option and would drop them.
@@ -118,6 +135,7 @@ static DOWNLOAD_PREFS: Mutex<(String, bool)> = Mutex::new((String::new(), false)
 // The three dots menu: (label, shortcut, icon, action). An empty label is a divider.
 const MENU: &[(&str, &str, &str, &str)] = &[
     ("New tab", "Ctrl+T", "plus", "new_tab"),
+    ("New window", "Ctrl+N", "window", "new_window"),
     ("New private window", "Ctrl+Shift+N", "private", "private_tab"),
     ("Reopen closed tab", "Ctrl+Shift+T", "reopen", "reopen_tab"),
     ("", "", "", ""),
@@ -126,6 +144,12 @@ const MENU: &[(&str, &str, &str, &str)] = &[
     ("Downloads", "Ctrl+J", "download", "downloads"),
     ("", "", "", ""),
     ("Zoom", "", "search", "zoom"),
+    ("Ad blocker", "", "shield", "ad_blocker"),
+    ("Music and volume", "", "music", "music_dialog"),
+    ("Picture in picture", "Ctrl+Shift+P", "pip", "picture_in_picture"),
+    ("Extensions", "", "extension", "extensions"),
+    ("Search tabs", "Ctrl+Shift+A", "tabs", "tab_search"),
+    ("Reader mode", "", "book", "reader"),
     ("", "", "", ""),
     ("Cast screen", "Win+K", "cast", "cast"),
     ("Print", "Ctrl+P", "print", "print"),
@@ -293,7 +317,7 @@ const KEY_SCRIPT: &str = r#"
 if (window === top) addEventListener('keydown', e => {
   if (e.key === 'F12') { e.preventDefault(); return window.ipc.postMessage('dev_tools'); }
   if (!e.ctrlKey || e.altKey) return;
-  const name = {'+': 'zoom_in', '=': 'zoom_in', '-': 'zoom_out', _: 'zoom_out', 0: 'zoom_reset', t: 'new_tab', w: 'close_tab', l: 'focus_address', d: 'bookmark', h: 'history', j: 'downloads', T: 'reopen_tab', N: 'private_tab', O: 'bookmarks', I: 'dev_tools', u: 'view_source', Tab: e.shiftKey ? 'prev_tab' : 'next_tab'}[e.key];
+  const name = {A: 'tab_search', '+': 'zoom_in', '=': 'zoom_in', '-': 'zoom_out', _: 'zoom_out', 0: 'zoom_reset', t: 'new_tab', w: 'close_tab', l: 'focus_address', d: 'bookmark', h: 'history', j: 'downloads', T: 'reopen_tab', N: 'private_tab', O: 'bookmarks', I: 'dev_tools', u: 'view_source', Tab: e.shiftKey ? 'prev_tab' : 'next_tab'}[e.key];
   if (name) { e.preventDefault(); window.ipc.postMessage(name); }
 }, true);
 "#;
@@ -305,9 +329,13 @@ if (window === top) addEventListener('DOMContentLoaded', () => {
   const link = [...document.querySelectorAll('link[rel~="icon"]')].pop();
   if (link?.href) window.ipc.postMessage('icon:' + link.href);
 });
+if (window === top) addEventListener('load', () => setTimeout(() => {
+  const paragraphs = [...document.querySelectorAll('article p, main p, [role=main] p, p')].map(p => p.textContent.trim().length).filter(n => n > 80);
+  if (paragraphs.length >= 4 && paragraphs.reduce((a, b) => a + b, 0) > 1400) window.ipc.postMessage('article');
+}, 800));
 if (window === top) for (const name of ['play', 'pause', 'ended', 'volumechange']) addEventListener(name, () => {
   const m = [...document.querySelectorAll('video,audio')], el = m.find(x => !x.paused) || m[0];
-  if (el) window.ipc.postMessage('media:' + JSON.stringify({playing: !el.paused, volume: el.muted ? 0 : el.volume}));
+  if (el) window.ipc.postMessage('media:' + JSON.stringify({playing: !el.paused, volume: el.muted ? 0 : el.volume, video: !!document.querySelector('video')}));
 }, true);
 "#;
 
@@ -351,6 +379,12 @@ enum Msg {
     DevtoolsScan,
     Fullscreen(u64, bool),
     UpdateReady(String),
+    TabCrashed(u64),
+    NavStarted(u64),
+    NavFinished(u64, COREWEBVIEW2_WEB_ERROR_STATUS, bool),
+    SlowCheck(u64, u64),
+    Extensions(Vec<(String, String, bool)>),
+    ExtensionAdded(bool),
     UpdateChecked(Option<Option<String>>),
     Processes(Vec<(u32, COREWEBVIEW2_PROCESS_KIND, Vec<String>)>),
 }
@@ -370,6 +404,11 @@ struct Tab {
     view: Option<WebView>, // None = asleep
     devtools: Option<isize>, // its DevTools window, docked inside the browser window
     zoom: f64, // kept here so it survives the tab sleeping
+    pinned: bool, // stays left and awake, and comes back next time
+    has_video: bool,
+    readable: bool, // the page looks like an article, so reader mode can help
+    crashed_url: Option<String>, // the page to go back to while an error page shows
+    nav_seq: Option<u64>, // the navigation under way that has not finished yet
 }
 
 // A real floating window, so Windows gives it rounded corners and a shadow, and it can pass the browser's edges.
@@ -400,6 +439,7 @@ impl Popup {
 struct Browser {
     window: Window,
     context: WebContext,
+    ui_context: Option<WebContext>, // agent mode only: keeps Riffle's own interface out of the agent's reach
     args: String,
     proxy: EventLoopProxy<Msg>,
     toolbar: Option<WebView>,
@@ -414,6 +454,7 @@ struct Browser {
     data_dir: PathBuf,
     settings: Value,
     private_window: bool, // every tab in this window is private
+    moved_window: bool, // made from a tab moved out of another window, which stays the one that restores and saves tabs
     adblock: bool, // fixed at startup, because web views must all share one set of browser args
     bookmarks: Vec<Value>,
     downloads: Vec<Value>,
@@ -444,6 +485,15 @@ struct Browser {
     bookmark_dialog: Option<Popup>,
     bookmark_height: f64, // measured by the dialog, which grows to show an error
     zoom_popup: Option<Popup>,
+    site_zoom: Value, // host to level, for sites not at 100%
+    tab_menu: Option<(Popup, u64)>,
+    marks_menu: Option<(Popup, usize)>, // the bookmarks that do not fit on the bar, from this index on
+    tab_search: Option<Popup>,
+    last_download: Option<Instant>,
+    slow_note: Option<Popup>,
+    nav_counter: u64,
+    import_status: String,
+    extension_status: String,
     bookmark_closed: std::time::Instant,
     bookmark_url: String, // the bookmark that dialog is editing, kept in case the tab moves on
     bookmark_added: bool, // just now, rather than opened to edit
@@ -499,6 +549,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&data_dir)?;
     let settings = sanitize_settings(&load_json(&data_dir.join("settings.json")));
     let adblock = settings["adblock"] == true;
+    let agent_setting = settings["agent_mode"] == true;
     set_allowed_sites(&settings);
     if !private_window {
         compact_history(&data_dir.join("history.jsonl"));
@@ -507,10 +558,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SEED_ENGINE.set(seed_engine());
         load_filters(data_dir.clone(), !private_window); // two windows must not download over each other
     }
+    let site_zoom = if private_window { json!({}) } else { load_json(&data_dir.join("zoom.json")) };
     let mut browser = Browser {
         window,
         context: WebContext::new(Some(data_dir.clone())),
-        args: browser_args(agent_mode),
+        // A second engine process, so it costs memory only while agent mode is on.
+        ui_context: ((agent_mode || agent_setting) && std::env::var_os("RIFFLE_AGENT_SEE_UI").is_none()).then(|| WebContext::new(Some(data_dir.join("agent-ui")))),
+        args: browser_args(agent_mode || agent_setting),
         proxy: event_loop.create_proxy(),
         toolbar: None,
         tabs: Vec::new(),
@@ -526,6 +580,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         data_dir,
         settings,
         private_window,
+        moved_window: std::env::args().any(|a| a == "--moved"),
         adblock,
         closed: Vec::new(),
         last_visit: Default::default(),
@@ -554,6 +609,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         bookmark_dialog: None,
         bookmark_height: 220.0,
         zoom_popup: None,
+        site_zoom,
+        tab_menu: None,
+        marks_menu: None,
+        tab_search: None,
+        last_download: None,
+        slow_note: None,
+        nav_counter: 0,
+        import_status: String::new(),
+        extension_status: String::new(),
         bookmark_closed: std::time::Instant::now(),
         bookmark_url: String::new(),
         bookmark_added: false,
@@ -572,6 +636,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     if !private_window {
         keep_updated(browser.data_dir.clone(), event_loop.create_proxy());
+    }
+    // Once ever, and not for an agent that has no one to read it.
+    let welcomed = browser.data_dir.join("welcomed");
+    if !private_window && !agent_mode && !browser.moved_window && std::fs::read_to_string(&welcomed).ok().as_deref() != Some(WELCOME_FOR) {
+        let _ = std::fs::write(welcomed, WELCOME_FOR);
+        browser.open_tab(WELCOME_URL, false);
     }
 
     let idle_proxy = event_loop.create_proxy();
@@ -598,6 +668,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 browser.shield = None;
                 browser.bookmark_dialog = None;
                 browser.zoom_popup = None;
+                browser.tab_menu = None;
+                browser.marks_menu = None;
+                browser.tab_search = None;
+                browser.slow_note = None;
                 browser.suggest = None;
                 browser.download_bubble = None;
             }
@@ -660,6 +734,14 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     });
 }
 
+/// For the toolbar, dialogs and pages. In agent mode they run without the debugging port, so agents see only real tabs.
+fn ui_view_builder<'a>(ui_context: &'a mut Option<WebContext>, context: &'a mut WebContext, args: &str) -> WebViewBuilder<'a> {
+    match ui_context {
+        Some(own) => WebViewBuilder::new_with_web_context(own).with_additional_browser_args(browser_args(false)),
+        None => WebViewBuilder::new_with_web_context(context).with_additional_browser_args(args),
+    }
+}
+
 fn browser_args(agent_mode: bool) -> String {
     // The first flags are wry's defaults, which setting custom args would otherwise drop.
     let mut args = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection".to_string();
@@ -687,8 +769,8 @@ impl Browser {
     fn build_toolbar(&mut self) -> wry::Result<()> {
         let proxy = self.proxy.clone();
         let bounds = self.bounds(true);
-        let view = WebViewBuilder::new_with_web_context(&mut self.context)
-            .with_additional_browser_args(self.args.clone())
+        let view = ui_view_builder(&mut self.ui_context, &mut self.context, &self.args)
+            .with_browser_extensions_enabled(true)
             .with_bounds(bounds)
             .with_html(TOOLBAR_HTML.replace("<!--ICONS-->", ICONS_HTML))
             .with_initialization_script(KEY_SCRIPT)
@@ -706,7 +788,7 @@ impl Browser {
             .filter(|t| t.view.is_some())
             .filter_map(|t| {
                 let site = Url::parse(&t.url).ok().and_then(|u| u.host_str().map(|h| h.trim_start_matches("www.").to_string())).unwrap_or_default();
-                t.media.map(|(playing, volume)| json!({"id": t.id, "title": t.title, "site": site, "playing": playing, "volume": volume}))
+                t.media.map(|(playing, volume)| json!({"id": t.id, "title": t.title, "site": site, "playing": playing, "volume": volume, "video": t.has_video}))
             })
             .collect()
     }
@@ -714,10 +796,11 @@ impl Browser {
     fn music_bounds(&self) -> Rect {
         let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
         let rows = self.music_items().len();
-        let wanted = if rows == 0 { 72.0 } else { rows as f64 * 117.0 };
+        let system = if system_volume().is_some() { 97.0 } else { 0.0 }; // that row and its divider in music.html
+        let wanted = system + if rows == 0 { 72.0 } else { rows as f64 * 117.0 };
         let height = wanted.min(400.0).min((size.height - NAV_ROW_BOTTOM).max(0.0));
         let width = MUSIC_WIDTH.min(size.width);
-        let x = (size.width - MUSIC_BUTTON_RIGHT - width).max(0.0);
+        let x = (size.width - self.toolbar_button_right("music") - width).max(0.0);
         Rect { position: LogicalPosition::new(x, NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, height).into() }
     }
 
@@ -742,8 +825,8 @@ impl Browser {
         };
         round_corners(window.hwnd() as _);
         let proxy = self.proxy.clone();
-        let built = WebViewBuilder::new_with_web_context(&mut self.context)
-            .with_additional_browser_args(self.args.clone())
+        let built = ui_view_builder(&mut self.ui_context, &mut self.context, &self.args)
+            .with_browser_extensions_enabled(true)
             .with_focused(focus) // on by default, which would pull typing out of the address bar
             .with_initialization_script(KEY_SCRIPT)
             .with_bounds(Rect { position: LogicalPosition::new(0.0, 0.0).into(), size: area.size })
@@ -797,7 +880,7 @@ impl Browser {
         let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
         let width = SHIELD_WIDTH.min(size.width);
         let height = self.shield_height.min((size.height - NAV_ROW_BOTTOM).max(0.0));
-        Rect { position: LogicalPosition::new((size.width - SHIELD_BUTTON_RIGHT - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, height).into() }
+        Rect { position: LogicalPosition::new((size.width - self.toolbar_button_right("shield") - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, height).into() }
     }
 
     fn toggle_shield(&mut self, target: &EventLoopWindowTarget<Msg>) {
@@ -813,7 +896,7 @@ impl Browser {
         shield.place(&self.window, self.shield_bounds());
         let guard = tab.guard.borrow();
         let site = Url::parse(&tab.url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_default();
-        let state = json!({"blocked": guard.blocked, "target": guard.stopped, "site": site, "on": !site_is_allowed(&tab.url), "popups": popups_are_allowed(&tab.url), "theme": self.settings["theme"], "private": tab.private});
+        let state = json!({"blocked": guard.blocked, "target": guard.stopped, "site": site, "on": !site_is_allowed(&tab.url), "popups": popups_are_allowed(&tab.url), "month": if self.private_window { 0 } else { blocked_this_month(&self.data_dir) }, "theme": self.settings["theme"], "private": tab.private});
         let _ = shield.evaluate_script(&format!("render({state})"));
     }
 
@@ -929,7 +1012,8 @@ impl Browser {
         let Some(music) = &self.music else { return };
         music.place(&self.window, self.music_bounds());
         let private = self.tabs.iter().any(|t| t.id == self.active && t.private);
-        let state = json!({"items": self.music_items(), "theme": self.settings["theme"], "accent": self.settings["accent"], "private": private});
+        let system = system_volume().map(|(volume, muted)| json!({"volume": volume, "muted": muted}));
+        let state = json!({"items": self.music_items(), "system": system, "theme": self.settings["theme"], "accent": self.settings["accent"], "private": private});
         let _ = music.evaluate_script(&format!("render({state})"));
     }
 
@@ -960,6 +1044,10 @@ impl Browser {
         self.shield = None;
         self.bookmark_dialog = None;
         self.zoom_popup = None;
+        self.tab_menu = None;
+        self.marks_menu = None;
+        self.tab_search = None;
+        self.slow_note = None;
         self.panel_page = page.to_string();
         if self.panel.is_some() {
             self.render_panel();
@@ -967,8 +1055,8 @@ impl Browser {
         }
         let proxy = self.proxy.clone();
         let bounds = self.bounds(false);
-        let built = WebViewBuilder::new_with_web_context(&mut self.context)
-            .with_additional_browser_args(self.args.clone())
+        let built = ui_view_builder(&mut self.ui_context, &mut self.context, &self.args)
+            .with_browser_extensions_enabled(true)
             .with_bounds(bounds)
             .with_html(PANEL_HTML.replace("<!--ICONS-->", ICONS_HTML))
             .with_initialization_script(KEY_SCRIPT)
@@ -1031,7 +1119,7 @@ impl Browser {
                 drop(proxy.send_event(Msg::Processes(found)));
                 Ok(())
             }));
-            let _ = toolbar.environment().cast::<ICoreWebView2Environment13>().map(|e| e.GetProcessExtendedInfos(&handler));
+            let _ = self.engine_view().unwrap_or(toolbar).environment().cast::<ICoreWebView2Environment13>().map(|e| e.GetProcessExtendedInfos(&handler));
         }
     }
 
@@ -1062,11 +1150,100 @@ impl Browser {
         let _ = panel.evaluate_script(&format!("renderTasks({})", Value::Array(rows)));
     }
 
+    /// A web view in the engine that runs the tabs, which in agent mode is not the toolbar's.
+    fn engine_view(&self) -> Option<&WebView> {
+        if self.ui_context.is_some() { self.tabs.iter().find_map(|t| t.view.as_ref()) } else { self.toolbar.as_ref() }
+    }
+
+    fn extension_profile(&self) -> Option<ICoreWebView2Profile7> {
+        // SAFETY: COM calls on the UI thread that owns this web view.
+        unsafe { self.engine_view()?.webview().cast::<ICoreWebView2_13>().ok()?.Profile().ok()?.cast().ok() }
+    }
+
+    fn request_extensions(&self) {
+        let Some(profile) = self.extension_profile() else { return };
+        let proxy = self.proxy.clone();
+        // SAFETY: COM calls on the UI thread; returned strings are taken once by take_pwstr.
+        unsafe {
+            let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(move |_, list| {
+                let Some(list) = list else { return Ok(()) };
+                let mut count = 0;
+                list.Count(&mut count)?;
+                let mut rows = Vec::new();
+                for i in 0..count {
+                    let item = list.GetValueAtIndex(i)?;
+                    let (mut id, mut name, mut on) = (PWSTR::null(), PWSTR::null(), BOOL(0));
+                    item.Id(&mut id)?;
+                    item.Name(&mut name)?;
+                    item.IsEnabled(&mut on)?;
+                    let name = take_pwstr(name);
+                    // Parts of the engine, such as its PDF viewer, which removing would break.
+                    if !name.starts_with("Microsoft ") {
+                        rows.push((take_pwstr(id), name, on.as_bool()));
+                    }
+                }
+                drop(proxy.send_event(Msg::Extensions(rows)));
+                Ok(())
+            }));
+            let _ = profile.GetBrowserExtensions(&handler);
+        }
+    }
+
+    fn add_extension(&self, folder: &Path) {
+        let Some(profile) = self.extension_profile() else { return };
+        let proxy = self.proxy.clone();
+        let path = windows::core::HSTRING::from(folder.as_os_str());
+        // SAFETY: a COM call on the UI thread, with a string that outlives the call.
+        unsafe {
+            let handler = ProfileAddBrowserExtensionCompletedHandler::create(Box::new(move |result, _| {
+                drop(proxy.send_event(Msg::ExtensionAdded(result.is_ok())));
+                Ok(())
+            }));
+            if profile.AddBrowserExtension(&path, &handler).is_err() {
+                drop(self.proxy.send_event(Msg::ExtensionAdded(false)));
+            }
+        }
+    }
+
+    fn change_extension(&self, wanted: String, remove: bool, on: bool) {
+        let Some(profile) = self.extension_profile() else { return };
+        let proxy = self.proxy.clone();
+        // SAFETY: COM calls on the UI thread; returned strings are taken once by take_pwstr.
+        unsafe {
+            let handler = ProfileGetBrowserExtensionsCompletedHandler::create(Box::new(move |_, list| {
+                let Some(list) = list else { return Ok(()) };
+                let mut count = 0;
+                list.Count(&mut count)?;
+                for i in 0..count {
+                    let item = list.GetValueAtIndex(i)?;
+                    let mut id = PWSTR::null();
+                    item.Id(&mut id)?;
+                    if take_pwstr(id) == wanted {
+                        let done = proxy.clone();
+                        if remove {
+                            item.Remove(&BrowserExtensionRemoveCompletedHandler::create(Box::new(move |_| {
+                                drop(done.send_event(Msg::Toolbar(json!({"cmd": "ext_refresh"}).to_string())));
+                                Ok(())
+                            })))?;
+                        } else {
+                            item.Enable(on, &BrowserExtensionEnableCompletedHandler::create(Box::new(move |_| {
+                                drop(done.send_event(Msg::Toolbar(json!({"cmd": "ext_refresh"}).to_string())));
+                                Ok(())
+                            })))?;
+                        }
+                    }
+                }
+                Ok(())
+            }));
+            let _ = profile.GetBrowserExtensions(&handler);
+        }
+    }
+
     fn render_panel(&self) {
         let Some(panel) = &self.panel else { return };
         let mut history = parse_history(&read_lossy(&self.history_path()).unwrap_or_default());
         history.reverse();
-        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "version": env!("CARGO_PKG_VERSION"), "update_ready": self.update_ready, "update_status": self.update_status, "engine_version": wry::webview_version().ok(), "default_browser": self.panel_page == "settings" && is_default_browser()});
+        let state = json!({"page": self.panel_page, "bookmarks": self.bookmarks, "history": history, "settings": self.settings, "downloads": self.downloads.iter().rev().collect::<Vec<_>>(), "installed": is_installed(), "version": env!("CARGO_PKG_VERSION"), "update_ready": self.update_ready, "update_status": self.update_status, "import_status": self.import_status, "engine_version": wry::webview_version().ok(), "default_browser": self.panel_page == "settings" && is_default_browser()});
         let _ = panel.evaluate_script(&format!("render({state})"));
     }
 
@@ -1086,17 +1263,22 @@ impl Browser {
     }
 
     fn restore_session(&mut self) {
-        if self.settings["restore"] != true || self.private_window {
+        if self.private_window || self.moved_window {
             return;
         }
+        let restore = self.settings["restore"] == true;
         let saved = load_json(&self.data_dir.join("session.json"));
         for entry in saved.as_array().into_iter().flatten() {
+            let pinned = entry["pinned"] == true;
+            if !restore && !pinned {
+                continue; // pinned tabs always come back
+            }
             let Some(url) = entry["url"].as_str().filter(|u| is_web(u)) else { continue };
             let title = entry["title"].as_str().unwrap_or(url).to_string();
             let id = self.next_id;
             self.next_id += 1;
             // Left asleep: only the selected tab loads, so restoring many tabs stays fast.
-            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None, zoom: 1.0 });
+            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None, zoom: 1.0, pinned, has_video: false, readable: false, crashed_url: None, nav_seq: None });
         }
     }
 
@@ -1104,13 +1286,18 @@ impl Browser {
         if self.private_window {
             return; // private tabs are never reopened, and the normal window's session stays untouched
         }
-        let path = self.data_dir.join("session.json");
-        if self.settings["restore"] != true {
-            let _ = std::fs::remove_file(path);
+        save_blocked_count(&self.data_dir);
+        if self.moved_window {
             return;
         }
-        let tabs: Vec<Value> = self.tabs.iter().filter(|t| !t.private && is_web(&t.url)).map(|t| json!({"url": t.url, "title": t.title})).collect();
-        save_json(&path, &json!(tabs));
+        let path = self.data_dir.join("session.json");
+        let restore = self.settings["restore"] == true;
+        let tabs: Vec<Value> = self.tabs.iter().filter(|t| !t.private && is_web(&t.url) && (restore || t.pinned)).map(|t| json!({"url": t.url, "title": t.title, "pinned": t.pinned})).collect();
+        if tabs.is_empty() {
+            let _ = std::fs::remove_file(path);
+        } else {
+            save_json(&path, &json!(tabs));
+        }
     }
 
     fn vouch_active(&self) {
@@ -1147,11 +1334,52 @@ impl Browser {
     }
 
     // A separate process, like other browsers' private windows, sharing the same profile and browser args.
+    // A web view belongs to its window, so the page reopens there: logins stay, while a playing video or unsaved typing does not.
+    fn move_tab_to_new_window(&mut self, id: u64) -> bool {
+        let Some(tab) = self.tabs.iter().find(|t| t.id == id).filter(|_| self.tabs.len() > 1) else { return false };
+        let opened = std::env::current_exe().and_then(|exe| {
+            let mut command = std::process::Command::new(exe);
+            command.arg("--moved");
+            if tab.private {
+                command.arg("--private");
+            }
+            if self.args.contains("--remote-debugging-port") {
+                command.arg("--agent");
+            }
+            if is_web(&tab.url) {
+                command.arg(&tab.url);
+            }
+            command.spawn()
+        });
+        match opened {
+            Ok(_) => self.close_tab(id),
+            Err(e) => {
+                show_error(&format!("Could not open a new window: {e}"));
+                false
+            }
+        }
+    }
+
+    // Like a dragged-out tab's window: it doesn't take over the saved session.
+    fn open_new_window(&self) {
+        let opened = std::env::current_exe().and_then(|exe| {
+            let mut command = std::process::Command::new(exe);
+            command.arg("--moved");
+            if self.args.contains("--remote-debugging-port") {
+                command.arg("--agent");
+            }
+            command.spawn()
+        });
+        if let Err(e) = opened {
+            show_error(&format!("Could not open a new window: {e}"));
+        }
+    }
+
     fn open_private_window(&self) {
         let opened = std::env::current_exe().and_then(|exe| {
             let mut command = std::process::Command::new(exe);
             command.arg("--private");
-            if std::env::args().any(|a| a == "--agent") {
+            if self.args.contains("--remote-debugging-port") {
                 command.arg("--agent");
             }
             command.spawn()
@@ -1192,7 +1420,56 @@ impl Browser {
     fn zoom_bounds(&self) -> Rect {
         let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
         let width = ZOOM_POPUP.0.min(size.width);
-        Rect { position: LogicalPosition::new((size.width - ZOOM_BUTTON_RIGHT - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, ZOOM_POPUP.1).into() }
+        Rect { position: LogicalPosition::new((size.width - self.address_end_right() - self.address_icons_before_zoom() - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, ZOOM_POPUP.1).into() }
+    }
+
+    /// Whether the blocker has something to say about this page: it stopped something, or it is turned off here.
+    fn show_shield_icon(&self) -> bool {
+        self.adblock && self.icon_choice("shield", self.tabs.iter().find(|t| t.id == self.active).is_some_and(|t| {
+            let guard = t.guard.borrow();
+            is_web(&t.url) && (guard.blocked > 0 || guard.stopped.is_some() || site_is_allowed(&t.url))
+        }))
+    }
+
+    /// What the user chose in Settings, with "needed" deciding for "only when needed".
+    fn icon_choice(&self, name: &str, needed: bool) -> bool {
+        match self.settings["toolbar"][name].as_str().unwrap_or("show") {
+            "hide" => false,
+            "auto" => needed,
+            _ => true,
+        }
+    }
+
+    fn show_reader_icon(&self) -> bool {
+        self.tabs.iter().find(|t| t.id == self.active).is_some_and(|t| is_web(&t.url) && self.icon_choice("reader", t.readable))
+    }
+
+    // From the right: menu, music, private, shield, downloads, extensions.
+    fn toolbar_button_shown(&self, name: &str) -> bool {
+        match name {
+            "menu" => true,
+            "shield" => self.show_shield_icon(),
+            "downloads" => self.show_download_icon(),
+            "extensions" => !self.private_window && self.icon_choice("extensions", true),
+            other => self.icon_choice(other, true),
+        }
+    }
+
+    fn toolbar_button_right(&self, name: &str) -> f64 {
+        let before = ["menu", "music", "private", "shield", "downloads", "extensions"].iter().take_while(|n| **n != name).filter(|n| self.toolbar_button_shown(n)).count();
+        8.0 + before as f64 * TOOLBAR_BUTTON
+    }
+
+    fn address_end_right(&self) -> f64 {
+        self.toolbar_button_right("") + 4.0 - TOOLBAR_BUTTON * 0.0 - 2.0
+    }
+
+    fn address_icons_before_zoom(&self) -> f64 {
+        (if self.icon_choice("star", true) { ADDRESS_ICON } else { 0.0 }) + (if self.show_reader_icon() { ADDRESS_ICON } else { 0.0 })
+    }
+
+    fn show_download_icon(&self) -> bool {
+        self.icon_choice("downloads", self.tabs.iter().any(|t| t.downloads > 0) || self.last_download.is_some_and(|at| at.elapsed().as_secs() < DOWNLOAD_ICON_SECS))
     }
 
     fn active_zoom(&self) -> f64 {
@@ -1202,8 +1479,26 @@ impl Browser {
     fn change_zoom(&mut self, how: &str) {
         let Some(tab) = self.tabs.iter_mut().find(|t| t.id == self.active) else { return };
         tab.zoom = next_zoom(tab.zoom, how);
+        let (zoom, host) = (tab.zoom, Url::parse(&tab.url).ok().and_then(|u| u.host_str().map(str::to_string)));
         if let Some(view) = &tab.view {
-            set_view_zoom(view, tab.zoom);
+            set_view_zoom(view, zoom);
+        }
+        // The whole site follows, as in Chrome and Edge. A private window remembers nothing.
+        if let Some(host) = host {
+            for other in self.tabs.iter_mut().filter(|t| Url::parse(&t.url).ok().is_some_and(|u| u.host_str() == Some(&host))) {
+                other.zoom = zoom;
+                if let Some(view) = &other.view {
+                    set_view_zoom(view, zoom);
+                }
+            }
+            if !self.private_window {
+                if let Some(map) = self.site_zoom.as_object_mut() {
+                    if zoom == 1.0 { map.remove(&host); } else { map.insert(host, json!(zoom)); }
+                } else {
+                    self.site_zoom = json!({host: zoom});
+                }
+                save_json(&self.data_dir.join("zoom.json"), &self.site_zoom);
+            }
         }
         self.render_zoom();
         self.sync_toolbar();
@@ -1233,7 +1528,7 @@ impl Browser {
     fn bookmark_bounds(&self) -> Rect {
         let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
         let width = BOOKMARK_WIDTH.min(size.width);
-        Rect { position: LogicalPosition::new((size.width - STAR_BUTTON_RIGHT - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, self.bookmark_height).into() }
+        Rect { position: LogicalPosition::new((size.width - self.address_end_right() - width).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, self.bookmark_height).into() }
     }
 
     fn save_bookmarks(&self) {
@@ -1244,6 +1539,10 @@ impl Browser {
     // shortcut: a site that changes neither title nor page is missed, enough for history in practice.
     fn note_visit(&mut self, id: u64) {
         let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) else { return };
+        // These are built-in pages, which the engine sees as a blank address. The tab keeps what it really is.
+        if tab.url == WELCOME_URL || tab.crashed_url.is_some() {
+            return;
+        }
         if let Some(Ok(url)) = tab.view.as_ref().map(|v| v.url()) {
             if !url.is_empty() {
                 tab.url = url;
@@ -1272,6 +1571,10 @@ impl Browser {
         self.shield = None;
         self.bookmark_dialog = None;
         self.zoom_popup = None;
+        self.tab_menu = None;
+        self.marks_menu = None;
+        self.tab_search = None;
+        self.slow_note = None;
         self.suggest = None;
         self.download_bubble = None;
         if let Some(toolbar) = &self.toolbar {
@@ -1300,6 +1603,7 @@ impl Browser {
         self.leave_fullscreen(); // each of these needs the browser's own window back
         match name {
             "new_tab" => self.open_tab(&self.new_tab_url(), false),
+            "new_window" => self.open_new_window(),
             "private_tab" => self.open_private_window(),
             "reopen_tab" => {
                 if let Some(url) = self.closed.pop() {
@@ -1346,6 +1650,20 @@ impl Browser {
                 self.layout();
             }
             "task_manager" => self.open_panel("tasks"),
+            "extensions" => self.open_panel("extensions"),
+            "picture_in_picture" => {
+                if let Some(view) = self.active_view() {
+                    toggle_picture_in_picture(view);
+                }
+            }
+            "ad_blocker" => drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "shield"}).to_string()))),
+            "music_dialog" => drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "music"}).to_string()))),
+            "tab_search" => drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "tab_search"}).to_string()))),
+            "reader" => {
+                if let Some(view) = self.active_view() {
+                    let _ = view.evaluate_script(READER_JS);
+                }
+            }
             "bookmarks" | "history" | "downloads" | "settings" => self.open_panel(name),
             _ => {}
         }
@@ -1376,8 +1694,10 @@ impl Browser {
         let filtering = self.adblock;
         let (started, finished) = (self.proxy.clone(), self.proxy.clone());
         let owner = self.window.hwnd() as isize;
+        let nav_started = self.proxy.clone();
         let mut builder = WebViewBuilder::new_with_web_context(&mut self.context)
             .with_additional_browser_args(self.args.clone())
+            .with_browser_extensions_enabled(true)
             .with_bounds(bounds)
             .with_incognito(private)
             .with_devtools(true)
@@ -1403,6 +1723,7 @@ impl Browser {
                         guard.stopped = None;
                     }
                     guard.nav_url = url;
+                    drop(nav_started.send_event(Msg::NavStarted(id)));
                     return true;
                 }
                 guard.blocked += 1;
@@ -1411,13 +1732,23 @@ impl Browser {
                 false
             })
             .with_initialization_script(MEDIA_SCRIPT);
-        builder = if url == "about:blank" {
+        builder = if url == WELCOME_URL {
+            builder.with_html(
+                WELCOME_HTML
+                    .replace("__THEME__", self.settings["theme"].as_str().unwrap_or("system"))
+                    .replace("__ACCENT__", self.settings["accent"].as_str().unwrap_or(DEFAULT_ACCENT))
+                    .replace("__VERSION__", env!("CARGO_PKG_VERSION")),
+            )
+        } else if url == "about:blank" {
             // Theme and accent are sanitized settings, so they are safe to place in the page.
             builder.with_html(
                 NEW_TAB_HTML
                     .replace("__THEME__", self.settings["theme"].as_str().unwrap_or("system"))
                     .replace("__ACCENT__", self.settings["accent"].as_str().unwrap_or(DEFAULT_ACCENT))
-                    .replace("__PRIVATE__", if private { "true" } else { "false" }),
+                    .replace("__PRIVATE__", if private { "true" } else { "false" })
+                    // Escaped, because titles come from web pages and this lands inside a script block.
+                    .replace("__MARKS__", &if private { "[]".to_string() } else { json!(self.bookmarks.iter().take(8).map(|b| json!({"title": b["title"], "url": b["url"]})).collect::<Vec<_>>()).to_string().replace('<', "\\u003c") })
+                    .replace("__BLOCKED__", &if private { 0 } else { blocked_this_month(&self.data_dir) }.to_string()),
             )
         } else {
             builder.with_url(url)
@@ -1431,6 +1762,9 @@ impl Browser {
         let adblock = self.adblock;
         let keys = self.proxy.clone();
         let watch = self.proxy.clone();
+        let request_refresh = self.proxy.clone();
+        let crashes = self.proxy.clone();
+        let nav_finished = self.proxy.clone();
         let fullscreen = self.proxy.clone();
         builder
             .with_ipc_handler(move |req| {
@@ -1461,10 +1795,12 @@ impl Browser {
             .build_as_child(&self.window)
             .inspect(|view| {
                 native_keys(view, id, keys);
+                report_crashes(view, id, crashes);
+                report_navigation_results(view, id, nav_finished);
                 watch_devtools_windows(view, watch);
                 report_fullscreen(view, id, fullscreen);
                 if adblock {
-                    block_requests(view, request_guard);
+                    block_requests(view, request_guard, request_refresh);
                     early_scriptlets(view);
                 }
             })
@@ -1476,7 +1812,7 @@ impl Browser {
         self.next_id += 1;
         self.tabs.push(Tab {
             id,
-            title: "New tab".to_string(),
+            title: if url == WELCOME_URL { "Welcome to Riffle".to_string() } else { "New tab".to_string() },
             url: url.to_string(),
             loading: false,
             last_used: 0,
@@ -1489,6 +1825,11 @@ impl Browser {
             view: None,
             devtools: None,
             zoom: 1.0,
+            pinned: false,
+            has_video: false,
+            readable: false,
+            crashed_url: None,
+            nav_seq: None,
         });
         self.select(id);
     }
@@ -1502,6 +1843,10 @@ impl Browser {
         self.shield = None;
         self.bookmark_dialog = None;
         self.zoom_popup = None;
+        self.tab_menu = None;
+        self.marks_menu = None;
+        self.tab_search = None;
+        self.slow_note = None;
         let previous = self.active;
         if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == previous) {
             tab.last_seen = std::time::Instant::now();
@@ -1780,8 +2125,8 @@ impl Browser {
             let proxy = self.proxy.clone();
             let dark = self.settings["theme"] == "dark" || self.private_window;
             let html = DEVTOOLS_HTML.replace("<!--ICONS-->", ICONS_HTML).replace("__CLASS__", if dark { "dark" } else if self.settings["theme"] == "light" { "light" } else { "" });
-            self.devtools_header = WebViewBuilder::new_with_web_context(&mut self.context)
-                .with_additional_browser_args(self.args.clone())
+            self.devtools_header = ui_view_builder(&mut self.ui_context, &mut self.context, &self.args)
+            .with_browser_extensions_enabled(true)
                 .with_focused(false)
                 .with_html(html)
                 .with_drag_drop_handler(|_| true)
@@ -1805,7 +2150,7 @@ impl Browser {
         let tabs: Vec<Value> = self
             .tabs
             .iter()
-            .map(|t| json!({"id": t.id, "title": t.title, "asleep": t.view.is_none(), "active": t.id == self.active, "private": t.private, "url": t.url, "icon": t.icon, "loading": t.loading, "playing": t.media.is_some_and(|(playing, _)| playing)}))
+            .map(|t| json!({"id": t.id, "title": t.title, "asleep": t.view.is_none(), "active": t.id == self.active, "pinned": t.pinned, "private": t.private, "url": t.url, "icon": t.icon, "loading": t.loading, "playing": t.media.is_some_and(|(playing, _)| playing)}))
             .collect();
         let history_state = active.and_then(|t| t.view.as_ref()).map_or((false, false), can_go);
         let state = json!({
@@ -1815,12 +2160,20 @@ impl Browser {
             "maximized": self.window.is_maximized(),
             "private": active.is_some_and(|t| t.private),
             "zoom": active.map_or(100, |t| (t.zoom * 100.0).round() as u32),
+            "showDownloads": self.show_download_icon(),
+            "showShield": self.show_shield_icon(),
+            "showReader": self.show_reader_icon(),
+            "showExtensions": self.toolbar_button_shown("extensions"),
+            "showPrivate": self.icon_choice("private", true),
+            "showMusic": self.icon_choice("music", true),
+            "showStar": self.icon_choice("star", true),
             "downloading": self.tabs.iter().map(|t| t.downloads).sum::<u32>(),
             "bookmarked": active.is_some_and(|t| self.bookmarks.iter().any(|b| b["url"] == t.url.as_str())),
             "bar": self.show_bookmarks_bar(),
             "bookmarks": if self.show_bookmarks_bar() { json!(self.bookmarks) } else { json!([]) },
             "adblock": self.adblock,
             "blocked": active.map_or(0, |t| t.guard.borrow().blocked),
+            "pinnedCount": self.tabs.iter().filter(|t| t.pinned).count(),
             "stopped": active.is_some_and(|t| t.guard.borrow().stopped.is_some()),
             "allowed": active.is_some_and(|t| site_is_allowed(&t.url)),
             "playing": self.tabs.iter().any(|t| t.media.is_some_and(|(playing, _)| playing)),
@@ -1858,6 +2211,7 @@ impl Browser {
                 if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
                     tab.downloads = tab.downloads.saturating_sub(1);
                 }
+                self.last_download = Some(Instant::now());
                 self.reload_downloads();
                 if let Some(entry) = self.downloads.iter_mut().rev().find(|d| d["url"] == url.as_str() && d["state"] == "downloading") {
                     entry["state"] = json!(if ok { "done" } else { "failed" });
@@ -1880,6 +2234,76 @@ impl Browser {
                 }
             }
             Msg::DevtoolsScan => self.scan_devtools(),
+            Msg::TabCrashed(id) => {
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id && t.crashed_url.is_none()) {
+                    tab.crashed_url = Some(tab.url.clone());
+                    tab.title = "This page stopped working".to_string();
+                    tab.media = None;
+                    tab.loading = false;
+                    let site = tab.url.clone();
+                    if let Some(view) = &tab.view {
+                        let _ = view.load_html(&error_page(error_page_look(COREWEBVIEW2_WEB_ERROR_STATUS_UNEXPECTED_ERROR), "This page stopped working", "Your other tabs are fine. Anything you had typed into this page may be lost.", &[], &site, "Reload page", false));
+                    }
+                }
+                self.sync_toolbar();
+            }
+            Msg::NavStarted(id) => {
+                self.nav_counter += 1;
+                let seq = self.nav_counter;
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+                    tab.nav_seq = Some(seq);
+                }
+                if id == self.active {
+                    self.slow_note = None;
+                }
+                let proxy = self.proxy.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_secs(SLOW_SECS));
+                    drop(proxy.send_event(Msg::SlowCheck(id, seq)));
+                });
+            }
+            Msg::SlowCheck(id, seq) => {
+                // Still the same navigation, on the tab in view. Not over a video in fullscreen.
+                if id == self.active && !self.fullscreen && self.slow_note.is_none() && self.tabs.iter().any(|t| t.id == id && t.nav_seq == Some(seq)) {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let width = SLOW_NOTE.0.min(size.width);
+                    let top = TOOLBAR_HEIGHT + if self.show_bookmarks_bar() { BOOKMARKS_BAR_HEIGHT } else { 0.0 } + 8.0; // clear of the bars, over the page
+                    let area = Rect { position: LogicalPosition::new((size.width - width) / 2.0, top).into(), size: ViewSize::new(width, SLOW_NOTE.1).into() };
+                    self.slow_note = self.build_popup(target, SLOW_HTML, "Riffle slow page", area, false);
+                }
+            }
+            Msg::NavFinished(id, status, ok) => {
+                if id == self.active {
+                    self.slow_note = None;
+                }
+                if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+                    tab.nav_seq = None;
+                    if let Some((title, detail, tips)) = error_page_text(status).filter(|_| !ok && tab.crashed_url.is_none()) {
+                        let wanted = tab.guard.borrow().nav_url.clone();
+                        let url = if is_web(&wanted) { wanted } else { tab.url.clone() };
+                        tab.url = url.clone();
+                        tab.title = title.to_string();
+                        tab.crashed_url = Some(url.clone());
+                        tab.loading = false;
+                        let retry_online = status == COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED;
+                        let site = Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or(url);
+                        if let Some(view) = &tab.view {
+                            let _ = view.load_html(&error_page(error_page_look(status), title, detail, tips, &site, "Try again", retry_online));
+                        }
+                    }
+                }
+                self.sync_toolbar();
+            }
+            Msg::Extensions(list) => {
+                if let Some(panel) = self.panel.as_ref().filter(|_| self.panel_page == "extensions") {
+                    let rows: Vec<Value> = list.iter().map(|(id, name, on)| json!({"id": id, "name": name, "on": on})).collect();
+                    let _ = panel.evaluate_script(&format!("renderExtensions({})", json!({"rows": rows, "status": self.extension_status})));
+                }
+            }
+            Msg::ExtensionAdded(ok) => {
+                self.extension_status = if ok { "Extension added".to_string() } else { "That folder is not a working extension. Choose the folder holding its manifest.json".to_string() };
+                self.request_extensions();
+            }
             Msg::UpdateReady(version) => {
                 self.update_ready = Some(version);
                 if self.panel_page == "settings" {
@@ -1905,7 +2329,13 @@ impl Browser {
                     self.set_fullscreen(on);
                 }
             }
-            Msg::IdleCheck => self.sleep_idle_tabs(),
+            Msg::IdleCheck => {
+                self.sleep_idle_tabs();
+                if !self.private_window {
+                    save_blocked_count(&self.data_dir);
+                }
+                self.sync_toolbar(); // the download icon leaves in time
+            }
             Msg::Refresh => {
                 self.sync_toolbar();
                 self.render_shield();
@@ -1921,6 +2351,7 @@ impl Browser {
                 if let Some(report) = name.strip_prefix("media:") {
                     if let (Ok(report), Some(tab)) = (serde_json::from_str::<Value>(report), self.tabs.iter_mut().find(|t| t.id == id)) {
                         tab.media = Some((report["playing"] == true, report["volume"].as_f64().unwrap_or(1.0).clamp(0.0, 1.0)));
+                        tab.has_video = report["video"] == true;
                     }
                     self.render_music();
                     self.sync_toolbar();
@@ -1928,6 +2359,49 @@ impl Browser {
                 }
                 if let Some(report) = name.strip_prefix("ads:") {
                     self.hide_ads(id, report);
+                    return false;
+                }
+                // Only from the welcome tab itself: a web page in another tab, or this one later, gets nothing from these.
+                if let Some(action) = name.strip_prefix("welcome:").filter(|_| self.tabs.iter().any(|t| t.id == id && t.url == WELCOME_URL)) {
+                    match action {
+                        "chrome" | "edge" => {
+                            let command = json!({"cmd": "import_bookmarks", "value": action}).to_string();
+                            self.toolbar_command(&command, target);
+                            if let Some(view) = self.tabs.iter().find(|t| t.id == id).and_then(|t| t.view.as_ref()) {
+                                let _ = view.evaluate_script(&format!("imported({})", json!(self.import_status)));
+                            }
+                        }
+                        "default" => {
+                            let command = if is_installed() { "make_default" } else { "install_app" };
+                            return self.toolbar_command(&json!({"cmd": command}).to_string(), target);
+                        }
+                        "close" => {
+                            if self.tabs.len() > 1 {
+                                return self.close_tab(id);
+                            }
+                            self.open_tab(&self.new_tab_url(), false);
+                            return self.close_tab(id);
+                        }
+                        _ => {}
+                    }
+                    return false;
+                }
+                if name == "article" {
+                    if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+                        tab.readable = true;
+                    }
+                    self.sync_toolbar();
+                    return false;
+                }
+                if name == "crash_reload" {
+                    if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+                        if let Some(url) = tab.crashed_url.take() {
+                            tab.guard.borrow_mut().vouch();
+                            if let Some(view) = &tab.view {
+                                let _ = view.load_url(&url);
+                            }
+                        }
+                    }
                     return false;
                 }
                 if id != self.active {
@@ -1975,8 +2449,16 @@ impl Browser {
                         }
                         guard.top_url = url.clone();
                         tab.media = None; // a reload stops whatever was playing
+                        tab.readable = false;
                     } else {
                         tab.guard.borrow_mut().last_click = None; // a click explains its own page, not what that page does next
+                    }
+                    if (tab.url == WELCOME_URL || tab.crashed_url.is_some()) && !is_web(&url) {
+                        self.sync_toolbar(); // still that built-in page, which the engine sees as a blank address
+                        return false;
+                    }
+                    if is_web(&url) {
+                        tab.crashed_url = None; // the user moved on from an error page
                     }
                     if tab.url != url {
                         tab.title = url.clone(); // until the new page reports its title
@@ -1988,6 +2470,14 @@ impl Browser {
                     tab.url = url;
                 }
                 if loading {
+                    let site = self.tabs.iter().find(|t| t.id == id).and_then(|t| Url::parse(&t.url).ok()).and_then(|u| u.host_str().map(str::to_string));
+                    let zoom = site.and_then(|host| self.site_zoom[&host].as_f64()).unwrap_or(1.0);
+                    if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id) {
+                        tab.zoom = zoom;
+                        if let Some(view) = &tab.view {
+                            set_view_zoom(view, zoom);
+                        }
+                    }
                     self.inject_scriptlets(id);
                 } else {
                     self.note_visit(id);
@@ -2125,6 +2615,206 @@ impl Browser {
                 self.change_zoom(command["value"].as_str().unwrap_or(""));
                 return false;
             }
+            "tab_move" => {
+                if let Some(from) = self.tabs.iter().position(|t| Some(t.id) == id) {
+                    let pinned = self.tabs.iter().filter(|t| t.pinned).count();
+                    let to = tab_position(command["value"].as_u64().unwrap_or(from as u64) as usize, pinned, self.tabs.len(), self.tabs[from].pinned);
+                    let tab = self.tabs.remove(from);
+                    self.tabs.insert(to, tab);
+                    self.save_session();
+                }
+                self.sync_toolbar();
+                return false;
+            }
+            "marks_more" => {
+                self.marks_menu = None;
+                let from = command["from"].as_u64().unwrap_or(0) as usize;
+                let count = self.bookmarks.len().saturating_sub(from);
+                if count > 0 {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let height = (count as f64 * 32.0 + 16.0).min(416.0);
+                    let x = (command["x"].as_f64().unwrap_or(0.0) - MARKS_WIDTH).clamp(0.0, (size.width - MARKS_WIDTH).max(0.0));
+                    let area = Rect { position: LogicalPosition::new(x, TOOLBAR_HEIGHT + BOOKMARKS_BAR_HEIGHT).into(), size: ViewSize::new(MARKS_WIDTH, height).into() };
+                    if let Some(popup) = self.build_popup(target, MARKS_HTML, "Riffle more bookmarks", area, true) {
+                        self.marks_menu = Some((popup, from));
+                    }
+                }
+                return false;
+            }
+            "marks_ready" => {
+                if let Some((popup, from)) = &self.marks_menu {
+                    let marks = self.bookmarks.get(*from..).unwrap_or_default();
+                    let _ = popup.evaluate_script(&format!("render({})", json!({"marks": marks, "theme": self.settings["theme"], "private": self.private_window})));
+                }
+                return false;
+            }
+            "marks_close" => {
+                self.marks_menu = None;
+                return false;
+            }
+            "marks_pick" => {
+                self.marks_menu = None;
+                drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "go", "value": command["value"]}).to_string())));
+                return false;
+            }
+            "bookmark_move" => {
+                let (from, to) = (command["from"].as_u64().unwrap_or(u64::MAX) as usize, command["to"].as_u64().unwrap_or(u64::MAX) as usize);
+                if from < self.bookmarks.len() && to < self.bookmarks.len() && from != to {
+                    let moved = self.bookmarks.remove(from);
+                    self.bookmarks.insert(to, moved);
+                    self.save_bookmarks();
+                    self.sync_toolbar();
+                }
+                return false;
+            }
+            "tab_menu" => {
+                self.tab_menu = None;
+                self.marks_menu = None;
+                if let Some(tab) = id.filter(|i| self.tabs.iter().any(|t| t.id == *i)) {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let x = command["x"].as_f64().unwrap_or(0.0).clamp(0.0, (size.width - TAB_MENU_SIZE.0).max(0.0));
+                    let area = Rect { position: LogicalPosition::new(x, 36.0).into(), size: ViewSize::new(TAB_MENU_SIZE.0, TAB_MENU_SIZE.1).into() };
+                    if let Some(popup) = self.build_popup(target, TAB_MENU_HTML, "Riffle tab menu", area, true) {
+                        self.tab_menu = Some((popup, tab));
+                    }
+                }
+                return false;
+            }
+            "tab_detach" => return id.is_some_and(|id| self.move_tab_to_new_window(id)),
+            "tab_menu_ready" => {
+                if let Some((popup, tab)) = &self.tab_menu {
+                    let pinned = self.tabs.iter().any(|t| t.id == *tab && t.pinned);
+                    let _ = popup.evaluate_script(&format!("render({})", json!({"pinned": pinned, "alone": self.tabs.len() < 2, "theme": self.settings["theme"], "private": self.private_window})));
+                }
+                return false;
+            }
+            "tab_menu_close" => {
+                self.tab_menu = None;
+                self.marks_menu = None;
+                return false;
+            }
+            "tab_pick" => {
+                let Some((_, tab)) = self.tab_menu.take() else { return false };
+                match command["value"].as_str().unwrap_or("") {
+                    "pin" => {
+                        if let Some(from) = self.tabs.iter().position(|t| t.id == tab) {
+                            let mut moved = self.tabs.remove(from);
+                            moved.pinned = !moved.pinned;
+                            let group = self.tabs.iter().filter(|t| t.pinned).count();
+                            self.tabs.insert(group, moved);
+                            self.save_session();
+                            self.sync_toolbar();
+                        }
+                    }
+                    "window" => return self.move_tab_to_new_window(tab),
+                    "start" | "end" => {
+                        if let Some(from) = self.tabs.iter().position(|t| t.id == tab) {
+                            let pinned = self.tabs.iter().filter(|t| t.pinned).count();
+                            let wanted = if command["value"] == "start" { 0 } else { self.tabs.len() };
+                            let to = tab_position(wanted, pinned, self.tabs.len(), self.tabs[from].pinned);
+                            let moved = self.tabs.remove(from);
+                            self.tabs.insert(to, moved);
+                            self.save_session();
+                            self.sync_toolbar();
+                        }
+                    }
+                    "close" => return self.close_tab(tab),
+                    "others" => {
+                        let others: Vec<u64> = self.tabs.iter().filter(|t| t.id != tab && !t.pinned).map(|t| t.id).collect();
+                        self.select(tab);
+                        for other in others {
+                            self.close_tab(other);
+                        }
+                    }
+                    _ => {}
+                }
+                return false;
+            }
+            "tab_search" => {
+                if self.tab_search.take().is_none() {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let width = TAB_SEARCH_SIZE.0.min(size.width);
+                    let area = Rect { position: LogicalPosition::new(((size.width - width) / 2.0).max(0.0), NAV_ROW_BOTTOM).into(), size: ViewSize::new(width, TAB_SEARCH_SIZE.1.min((size.height - NAV_ROW_BOTTOM).max(120.0))).into() };
+                    self.tab_search = self.build_popup(target, TAB_SEARCH_HTML, "Riffle tab search", area, true);
+                }
+                return false;
+            }
+            "tab_search_ready" => {
+                let tabs: Vec<Value> = self.tabs.iter().map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "asleep": t.view.is_none()})).collect();
+                if let Some(popup) = &self.tab_search {
+                    let _ = popup.evaluate_script(&format!("render({})", json!({"tabs": tabs, "theme": self.settings["theme"], "private": self.private_window})));
+                }
+                return false;
+            }
+            "tab_search_close" => {
+                self.tab_search = None;
+        self.slow_note = None;
+                return false;
+            }
+            "tab_search_pick" => {
+                self.tab_search = None;
+        self.slow_note = None;
+                id.map(|id| self.select(id));
+                return false;
+            }
+            "media_pip" => {
+                let Some(view) = id.and_then(|id| self.tabs.iter().find(|t| t.id == id)).and_then(|t| t.view.as_ref()) else { return false };
+                toggle_picture_in_picture(view);
+                self.music = None;
+                return false;
+            }
+            "import_bookmarks" => {
+                let (name, path) = match command["value"].as_str().unwrap_or("") {
+                    "edge" => ("Edge", local_dir("Microsoft\\Edge\\User Data\\Default\\Bookmarks")),
+                    _ => ("Chrome", local_dir("Google\\Chrome\\User Data\\Default\\Bookmarks")),
+                };
+                self.reload_bookmarks();
+                self.import_status = match path.and_then(|p| std::fs::read_to_string(p).ok()) {
+                    None => format!("No {name} bookmarks were found on this PC"),
+                    Some(text) => {
+                        let added = merge_bookmarks(&mut self.bookmarks, parse_browser_bookmarks(&text));
+                        self.save_bookmarks();
+                        self.layout();
+                        self.sync_toolbar();
+                        format!("Added {added} {} from {name}", if added == 1 { "bookmark" } else { "bookmarks" })
+                    }
+                };
+                self.render_panel();
+                return false;
+            }
+            "ext_refresh" => {
+                self.request_extensions();
+                return false;
+            }
+            "ext_add" => {
+                self.extension_status.clear();
+                if let Some(folder) = pick_path(self.window.hwnd() as isize, true, "", "") {
+                    self.add_extension(&folder);
+                }
+                return false;
+            }
+            "ext_toggle" | "ext_remove" => {
+                let (wanted, remove, on) = (command["id"].as_str().unwrap_or("").to_string(), command["cmd"] == "ext_remove", command["value"] == true);
+                self.change_extension(wanted, remove, on);
+                return false;
+            }
+            "slow_ready" => {
+                if let Some(note) = &self.slow_note {
+                    let _ = note.evaluate_script(&format!("render({})", json!({"theme": self.settings["theme"], "private": self.private_window})));
+                }
+                return false;
+            }
+            "slow_close" => {
+                self.slow_note = None;
+                return false;
+            }
+            "slow_stop" => {
+                self.slow_note = None;
+                if let Some(view) = self.active_view() {
+                    let _ = view.evaluate_script("window.stop()");
+                }
+                return false;
+            }
             "zoom_toggle" => {
                 if self.zoom_popup.take().is_none() {
                     self.zoom_popup = self.build_popup(target, ZOOM_HTML, "Riffle zoom", self.zoom_bounds(), false);
@@ -2137,6 +2827,10 @@ impl Browser {
             }
             "zoom_close" => {
                 self.zoom_popup = None;
+        self.tab_menu = None;
+        self.marks_menu = None;
+        self.tab_search = None;
+        self.slow_note = None;
                 return false;
             }
             "menu_pick" => {
@@ -2198,6 +2892,17 @@ impl Browser {
             }
             "music" => {
                 self.toggle_music(target);
+                return false;
+            }
+            "system_volume" => {
+                if let Some(level) = command["value"].as_f64() {
+                    set_system_volume(level);
+                }
+                return false;
+            }
+            "system_mute" => {
+                set_system_mute(command["value"] == true);
+                self.render_music();
                 return false;
             }
             "music_ready" => {
@@ -2824,7 +3529,7 @@ fn decode_base64(text: &str) -> Option<Vec<u8>> {
 }
 
 // Every request from the page passes through here. A blocked one gets an empty 403 and never reaches the network.
-fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>) {
+fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>, refresh: EventLoopProxy<Msg>) {
     let webview = view.webview();
     let environment = view.environment();
     // SAFETY: COM calls on the UI thread that owns this web view; returned strings are taken once by take_pwstr.
@@ -2855,7 +3560,15 @@ fn block_requests(view: &WebView, guard: Rc<RefCell<Guard>>) {
                 return Ok(());
             }
             if let Some(stand_in) = request_verdict(&url, &source, resource_kind(context)) {
-                guard.borrow_mut().blocked += 1;
+                let count = {
+                    let mut guard = guard.borrow_mut();
+                    guard.blocked += 1;
+                    guard.blocked
+                };
+                if count == 1 || count % 10 == 0 {
+                    drop(refresh.send_event(Msg::Refresh));
+                }
+                BLOCKED_NOW.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 // A site that checks its ad script loaded gets a harmless copy, so it neither breaks nor accuses the visitor.
                 let response = match stand_in.as_deref().and_then(parse_stand_in) {
                     Some((kind, body)) => {
@@ -2889,10 +3602,13 @@ fn key_shortcut(key: u32, shift: bool) -> Option<&'static str> {
         ('D', false) => "bookmark",
         ('H', false) => "history",
         ('J', false) => "downloads",
+        ('N', false) => "new_window",
         ('N', true) => "private_tab",
         ('U', false) => "view_source",
         ('I' | 'J' | 'C', true) => "dev_tools",
         ('O', true) => "bookmarks",
+        ('A', true) => "tab_search",
+        ('P', true) => "picture_in_picture",
         ('\t', false) => "next_tab",
         ('\t', true) => "prev_tab",
         _ => return None,
@@ -2980,6 +3696,209 @@ fn set_view_zoom(view: &WebView, zoom: f64) {
     let _ = unsafe { view.controller().SetZoomFactor(zoom) };
 }
 
+/// The speakers or headphones Windows is using now, looked up each time because the user can switch them.
+fn system_audio() -> Option<IAudioEndpointVolume> {
+    // SAFETY: COM calls on the UI thread, where COM is already initialized for the web views.
+    unsafe {
+        let devices: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_INPROC_SERVER).ok()?;
+        devices.GetDefaultAudioEndpoint(eRender, eConsole).ok()?.Activate(CLSCTX_ALL, None).ok()
+    }
+}
+
+/// (level from 0 to 1, muted). None when the computer has no audio output.
+fn system_volume() -> Option<(f64, bool)> {
+    let audio = system_audio()?;
+    // SAFETY: plain queries on a COM object owned here.
+    unsafe { Some((audio.GetMasterVolumeLevelScalar().ok()? as f64, audio.GetMute().ok()?.as_bool())) }
+}
+
+fn set_system_volume(level: f64) {
+    if let Some(audio) = system_audio() {
+        // SAFETY: a COM call on an object owned here. The range is what the API accepts.
+        unsafe {
+            let _ = audio.SetMasterVolumeLevelScalar(level.clamp(0.0, 1.0) as f32, std::ptr::null());
+            if level > 0.0 {
+                let _ = audio.SetMute(false, std::ptr::null()); // moving the slider up should be heard
+            }
+        }
+    }
+}
+
+fn set_system_mute(muted: bool) {
+    if let Some(audio) = system_audio() {
+        // SAFETY: a COM call on an object owned here.
+        let _ = unsafe { audio.SetMute(muted, std::ptr::null()) };
+    }
+}
+
+/// Year and month, such as 2026-11, from seconds since 1970. Howard Hinnant's civil-from-days.
+fn month_key(secs: u64) -> String {
+    let z = (secs / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    format!("{}-{month:02}", yoe + era * 400 + i64::from(month <= 2))
+}
+
+/// Only counts by month, so nothing here says what was visited. Adds to the file, because other windows write to it too.
+fn save_blocked_count(dir: &Path) {
+    let new = BLOCKED_NOW.swap(0, std::sync::atomic::Ordering::Relaxed);
+    if new > 0 {
+        let path = dir.join("stats.json");
+        let mut stats = load_json(&path);
+        if !stats.is_object() {
+            stats = json!({});
+        }
+        let key = month_key(now_secs());
+        stats[&key] = json!(stats[&key].as_u64().unwrap_or(0) + new);
+        save_json(&path, &stats);
+    }
+}
+
+fn blocked_this_month(dir: &Path) -> u64 {
+    load_json(&dir.join("stats.json"))[month_key(now_secs())].as_u64().unwrap_or(0) + BLOCKED_NOW.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Where a tab may sit: pinned tabs keep to the left group, the rest keep to the right of it.
+fn tab_position(wanted: usize, pinned_tabs: usize, total: usize, is_pinned: bool) -> usize {
+    if is_pinned { wanted.min(pinned_tabs.saturating_sub(1)) } else { wanted.clamp(pinned_tabs, total.saturating_sub(1)) }
+}
+
+/// Every web bookmark in a Chrome or Edge Bookmarks file, as (title, address).
+fn parse_browser_bookmarks(text: &str) -> Vec<(String, String)> {
+    fn walk(node: &Value, out: &mut Vec<(String, String)>) {
+        if out.len() >= IMPORT_LIMIT {
+            return;
+        }
+        if node["type"] == "url" {
+            if let Some(url) = node["url"].as_str().filter(|u| is_web(u)) {
+                out.push((node["name"].as_str().unwrap_or(url).to_string(), url.to_string()));
+            }
+        }
+        for child in node["children"].as_array().into_iter().flatten() {
+            walk(child, out);
+        }
+    }
+    let parsed: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    let mut out = Vec::new();
+    if let Some(roots) = parsed["roots"].as_object() {
+        for root in roots.values() {
+            walk(root, &mut out);
+        }
+    }
+    out
+}
+
+/// Adds what is not already saved and returns how many that was. Existing names are left alone.
+fn merge_bookmarks(bookmarks: &mut Vec<Value>, found: Vec<(String, String)>) -> usize {
+    let before = bookmarks.len();
+    for (title, url) in found {
+        if !bookmarks.iter().any(|b| b["url"] == url.as_str()) {
+            let title = if title.trim().is_empty() { url.clone() } else { title };
+            bookmarks.push(json!({"url": url, "title": title}));
+        }
+    }
+    bookmarks.len() - before
+}
+
+/// (page title, what happened, what to try) for a failed page. None for what is not a failure to explain, such as
+/// the user stopping it, a download, or a site asking for a password.
+fn error_page_text(status: COREWEBVIEW2_WEB_ERROR_STATUS) -> Option<(&'static str, &'static str, &'static [&'static str])> {
+    const CHECK_CONNECTION: &[&str] = &["Check your Wi-Fi or network cable", "Try again in a moment"];
+    Some(match status {
+        COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED => ("No internet connection", "Riffle can't reach the internet right now. This page will come back by itself once you're connected.", CHECK_CONNECTION),
+        COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT => ("This site took too long to respond", "Your connection may be slow, or the site may be busy.", CHECK_CONNECTION),
+        COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED => ("This site can't be found", "The address may be misspelled, or the site may no longer exist.", &["Check the address for typing mistakes", "Check your internet connection"]),
+        COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT | COREWEBVIEW2_WEB_ERROR_STATUS_SERVER_UNREACHABLE => ("Can't connect to this site", "The site isn't accepting connections right now. It may be down, or your network may be blocking it.", &["Try again in a moment", "Check your internet connection"]),
+        COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET => ("The connection was interrupted", "The connection to this site dropped while the page was loading.", CHECK_CONNECTION),
+        COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_EXPIRED | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_COMMON_NAME_IS_INCORRECT | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_IS_INVALID | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_REVOKED | COREWEBVIEW2_WEB_ERROR_STATUS_CLIENT_CERTIFICATE_CONTAINS_ERRORS => ("This site's connection isn't secure", "Riffle stopped loading this page because its security certificate isn't valid. Someone could be trying to read what you send, so don't enter passwords or card details here.", &["Check your computer's date and time are right"]),
+        COREWEBVIEW2_WEB_ERROR_STATUS_REDIRECT_FAILED => ("This page isn't working", "The site sent Riffle round in a loop.", &["Try again in a moment"]),
+        COREWEBVIEW2_WEB_ERROR_STATUS_ERROR_HTTP_INVALID_SERVER_RESPONSE | COREWEBVIEW2_WEB_ERROR_STATUS_UNEXPECTED_ERROR => ("Something went wrong", "This site sent back something Riffle couldn't use.", &["Try again in a moment"]),
+        COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN => ("Something went wrong", "Riffle couldn't load this page.", &["Try again in a moment", "Check your internet connection"]),
+        _ => return None,
+    })
+}
+
+/// The icon drawing and tone for each failure: info, warning or danger.
+fn error_page_look(status: COREWEBVIEW2_WEB_ERROR_STATUS) -> (&'static str, &'static str) {
+    const WIFI_OFF: &str = r#"<path d="M2 2l20 20M8.500 16.500a5 5 0 0 1 7 0M2 8.800a15 15 0 0 1 4.200-2.700M10.700 5.100A15 15 0 0 1 22 8.800M5 12.900a10 10 0 0 1 5.200-2.800M18.500 12.900c-.6-.6-1.300-1.100-2-1.500M12 20h.01"/>"#;
+    const CLOCK: &str = r#"<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>"#;
+    const SEARCH: &str = r#"<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>"#;
+    const CLOUD_OFF: &str = r#"<path d="M2 2l20 20M5.800 5.800A7 7 0 0 0 7 19h10c.7 0 1.300-.1 1.900-.4M21.500 16a4.500 4.500 0 0 0-4-6.900h-.8A7 7 0 0 0 10 5.100"/>"#;
+    const SHIELD_ALERT: &str = r#"<path d="M12 3 5 6v5c0 4.500 3 8 7 10 4-2 7-5.500 7-10V6zM12 8v4M12 16h.01"/>"#;
+    const WARNING: &str = r#"<path d="M12 4 3 20h18zM12 10v4M12 17h.01"/>"#;
+    match status {
+        COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED | COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_RESET => (WIFI_OFF, "info"),
+        COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT => (CLOCK, "warning"),
+        COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED => (SEARCH, "info"),
+        COREWEBVIEW2_WEB_ERROR_STATUS_CANNOT_CONNECT | COREWEBVIEW2_WEB_ERROR_STATUS_SERVER_UNREACHABLE => (CLOUD_OFF, "warning"),
+        COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_EXPIRED | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_COMMON_NAME_IS_INCORRECT | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_IS_INVALID | COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_REVOKED | COREWEBVIEW2_WEB_ERROR_STATUS_CLIENT_CERTIFICATE_CONTAINS_ERRORS => (SHIELD_ALERT, "danger"),
+        _ => (WARNING, "warning"),
+    }
+}
+
+fn html_text(text: &str) -> String {
+    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn error_page(look: (&str, &str), title: &str, detail: &str, tips: &[&str], site: &str, action: &str, retry_online: bool) -> String {
+    let tips: String = tips.iter().map(|tip| format!("<li>{}</li>", html_text(tip))).collect();
+    ERROR_HTML
+        .replace("__ICON__", look.0)
+        .replace("__TONE__", look.1)
+        .replace("__TITLE__", &html_text(title))
+        .replace("__DETAIL__", &html_text(detail))
+        .replace("__TIPS__", &tips)
+        .replace("__SITE__", &html_text(site))
+        .replace("__ACTION__", &html_text(action))
+        .replace("__RETRY_ONLINE__", if retry_online { "true" } else { "false" })
+}
+
+fn report_navigation_results(view: &WebView, id: u64, proxy: EventLoopProxy<Msg>) {
+    // SAFETY: COM calls on the UI thread that owns this web view, writing into local values.
+    unsafe {
+        let handler = NavigationCompletedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let (mut ok, mut status) = (BOOL(0), COREWEBVIEW2_WEB_ERROR_STATUS_UNKNOWN);
+            args.IsSuccess(&mut ok)?;
+            args.WebErrorStatus(&mut status)?;
+            drop(proxy.send_event(Msg::NavFinished(id, status, ok.as_bool())));
+            Ok(())
+        }));
+        let mut token = Default::default();
+        let _ = view.webview().add_NavigationCompleted(&handler, &mut token);
+    }
+}
+
+fn report_crashes(view: &WebView, id: u64, proxy: EventLoopProxy<Msg>) {
+    // SAFETY: COM calls on the UI thread that owns this web view, writing into a local value.
+    unsafe {
+        let handler = ProcessFailedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED;
+            args.ProcessFailedKind(&mut kind)?;
+            if kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED || kind == COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE {
+                drop(proxy.send_event(Msg::TabCrashed(id)));
+            }
+            Ok(())
+        }));
+        let mut token = Default::default();
+        let _ = view.webview().add_ProcessFailed(&handler, &mut token);
+    }
+}
+
+/// Floats the page's playing video, or brings it back. Through DevTools, because a browser only allows this after
+/// a user gesture, and the gesture happened in Riffle rather than in the page.
+fn toggle_picture_in_picture(view: &WebView) {
+    let script = "(()=>{if(document.pictureInPictureElement)return document.exitPictureInPicture();const v=[...document.querySelectorAll('video')].filter(x=>x.readyState>0),el=v.find(x=>!x.paused)||v[0];if(!el)return;el.disablePictureInPicture=false;return el.requestPictureInPicture()})()";
+    let params = windows::core::HSTRING::from(json!({"expression": script, "userGesture": true, "awaitPromise": true}).to_string());
+    // SAFETY: a COM call on the UI thread, with strings that outlive the call.
+    let _ = unsafe { view.webview().CallDevToolsProtocolMethod(w!("Runtime.evaluate"), &params, &CallDevToolsProtocolMethodCompletedHandler::create(Box::new(|_, _| Ok(())))) };
+}
+
 /// Tabs playing audio through any route, including players the page script cannot see.
 fn plays_audio(view: &WebView) -> bool {
     let mut playing = BOOL(0);
@@ -2989,7 +3908,7 @@ fn plays_audio(view: &WebView) -> bool {
 
 /// Private tabs never sleep: dropping the last one would erase that private session's logins.
 fn must_stay_awake(tab: &Tab) -> bool {
-    tab.private || tab.devtools.is_some() || tab.downloads > 0 || tab.media.is_some_and(|(playing, _)| playing) || tab.view.as_ref().is_some_and(plays_audio)
+    tab.private || tab.pinned || tab.devtools.is_some() || tab.downloads > 0 || tab.media.is_some_and(|(playing, _)| playing) || tab.view.as_ref().is_some_and(plays_audio)
 }
 
 /// Whether a DevTools window's title names this address. Long titles are cut, so a start of it is enough.
@@ -3250,8 +4169,25 @@ fn local_dir(rest: &str) -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join(rest))
 }
 
+const INSTALL_POINTER: &str = "install-location.txt"; // in the data folder, for a folder chosen during setup
+
 fn install_dir() -> Option<PathBuf> {
-    local_dir("Programs\\Riffle")
+    let chosen = local_dir("Riffle").and_then(|d| std::fs::read_to_string(d.join(INSTALL_POINTER)).ok()).map(|text| PathBuf::from(text.trim())).filter(|p| p.is_absolute());
+    chosen.or_else(|| local_dir("Programs\\Riffle"))
+}
+
+/// Riffle always gets a folder of its own, because uninstalling deletes the whole folder.
+fn riffle_folder(chosen: &Path) -> PathBuf {
+    if chosen.file_name().is_some_and(|n| n.eq_ignore_ascii_case("Riffle")) { chosen.to_path_buf() } else { chosen.join("Riffle") }
+}
+
+/// Why this folder can't take Riffle. Refuses one holding other files, which uninstalling would delete.
+fn folder_problem(dir: &Path) -> Option<&'static str> {
+    if !dir.is_absolute() {
+        return Some("Choose a full folder path.");
+    }
+    let mut files = std::fs::read_dir(dir).ok()?.flatten();
+    (!dir.join("riffle-browser.exe").exists() && files.next().is_some()).then_some("That Riffle folder already has other files in it. Choose a different location.")
 }
 
 fn start_menu_link() -> Option<PathBuf> {
@@ -3471,13 +4407,17 @@ fn keep_updated(data_dir: PathBuf, proxy: EventLoopProxy<Msg>) {
 }
 
 /// Copies Riffle to the user's own programs folder and lists it in Windows. Needs no administrator rights.
-fn install_app(desktop: bool, pin_start: bool, step: impl Fn(u32, &str)) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let dir = install_dir().ok_or("LOCALAPPDATA is not set")?;
+fn install_app(chosen: &Path, desktop: bool, pin_start: bool, step: impl Fn(u32, &str)) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let dir = riffle_folder(chosen);
+    if let Some(problem) = folder_problem(&dir) {
+        return Err(problem.into());
+    }
     let link = start_menu_link().ok_or("APPDATA is not set")?;
     let target = dir.join("riffle-browser.exe");
     step(15, "Copying files");
-    if !is_installed() {
-        std::fs::create_dir_all(&dir)?;
+    let here = std::env::current_exe()?.parent().map(|p| p.to_string_lossy().to_lowercase());
+    if here != Some(dir.to_string_lossy().to_lowercase()) {
+        std::fs::create_dir_all(&dir).map_err(|e| if e.kind() == std::io::ErrorKind::PermissionDenied { "Riffle can't write to that folder without administrator rights. Go back and choose a different one.".to_string() } else { e.to_string() })?;
         std::fs::copy(std::env::current_exe()?, &target).map_err(|e| format!("{e}. Close any installed Riffle window and try again"))?;
     }
     step(45, "Adding the uninstaller");
@@ -3493,12 +4433,16 @@ fn install_app(desktop: bool, pin_start: bool, step: impl Fn(u32, &str)) -> Resu
     if !done.success() {
         return Err("Windows would not add the shortcuts or the Apps listing".into());
     }
+    let data = local_dir("Riffle").ok_or("LOCALAPPDATA is not set")?;
+    std::fs::create_dir_all(&data)?;
+    std::fs::write(data.join(INSTALL_POINTER), dir.to_string_lossy().as_bytes())?;
     step(100, "Finishing");
     Ok(target)
 }
 
 enum SetupMsg {
     Script(String),
+    Pick(String),
     Quit,
 }
 
@@ -3507,7 +4451,8 @@ fn run_setup(removing: bool) -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoopBuilder::<SetupMsg>::with_user_event().build();
     let window = WindowBuilder::new()
         .with_title(if removing { "Uninstall Riffle" } else { "Riffle Setup" })
-        .with_inner_size(LogicalSize::new(520.0, 400.0))
+        .with_visible(false) // shown once its page is ready, so there's no blank flash
+        .with_inner_size(LogicalSize::new(520.0, 320.0))
         .with_resizable(false)
         .with_maximizable(false)
         .with_window_icon(Some(Icon::from_rgba(logo_rgba(), LOGO_SIZE, LOGO_SIZE)?))
@@ -3515,7 +4460,9 @@ fn run_setup(removing: bool) -> Result<(), Box<dyn std::error::Error>> {
     // Its own profile: browser windows hold theirs with different engine flags, and it stores nothing worth keeping.
     let mut context = WebContext::new(Some(std::env::temp_dir().join("RiffleSetup")));
     let proxy = event_loop.create_proxy();
-    let place = install_dir().ok_or("LOCALAPPDATA is not set")?.to_string_lossy().to_string();
+    let current = install_dir().ok_or("LOCALAPPDATA is not set")?;
+    let existing = current.join("riffle-browser.exe").exists();
+    let place = current.to_string_lossy().to_string();
     let view = WebViewBuilder::new_with_web_context(&mut context)
         .with_html(INSTALL_HTML)
         .with_drag_drop_handler(|_| true)
@@ -3524,8 +4471,9 @@ fn run_setup(removing: bool) -> Result<(), Box<dyn std::error::Error>> {
             let command: Value = serde_json::from_str(req.body()).unwrap_or_default();
             let name = command["cmd"].as_str().unwrap_or("").to_string();
             match name.as_str() {
-                "ready" => drop(proxy.send_event(SetupMsg::Script(format!("setup({},{removing})", json!(place))))),
+                "ready" => drop(proxy.send_event(SetupMsg::Script(format!("setup({},{removing},{existing},{})", json!(place), json!(env!("CARGO_PKG_VERSION")))))),
                 "quit" => drop(proxy.send_event(SetupMsg::Quit)),
+                "pick" => drop(proxy.send_event(SetupMsg::Pick(command["place"].as_str().unwrap_or("").to_string()))),
                 "finish" => {
                     if command["launch"] == true {
                         if let Some(dir) = install_dir() {
@@ -3552,8 +4500,8 @@ fn run_setup(removing: bool) -> Result<(), Box<dyn std::error::Error>> {
                         let progress = proxy.clone();
                         let step = move |percent: u32, text: &str| drop(progress.send_event(SetupMsg::Script(format!("progress({percent},{})", json!(text)))));
                         // shortcut: Windows has no public taskbar pin for unpackaged apps, so the wizard explains the manual step.
-                        let script = match install_app(command["desktop"] == true, command["start"] == true, step) {
-                            Ok(_) => format!("finished({})", command["taskbar"] != true || taskbar_pinned()),
+                        let script = match install_app(Path::new(command["place"].as_str().unwrap_or("")), command["desktop"] == true, command["start"] == true, step) {
+                            Ok(_) => format!("finished({})", taskbar_pinned()),
                             Err(e) => format!("failed({})", json!(e.to_string())),
                         };
                         drop(proxy.send_event(SetupMsg::Script(script)));
@@ -3568,7 +4516,16 @@ fn run_setup(removing: bool) -> Result<(), Box<dyn std::error::Error>> {
         *control_flow = ControlFlow::Wait;
         match event {
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::UserEvent(SetupMsg::Quit) => *control_flow = ControlFlow::Exit,
-            Event::UserEvent(SetupMsg::Script(script)) => drop(view.evaluate_script(&script)),
+            Event::UserEvent(SetupMsg::Pick(place)) => {
+                let start = Path::new(&place).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+                if let Some(folder) = pick_path(window.hwnd() as isize, true, &start, "").map(|p| riffle_folder(&p)) {
+                    let _ = view.evaluate_script(&format!("chosen({},{})", json!(folder.to_string_lossy()), json!(folder_problem(&folder).unwrap_or(""))));
+                }
+            }
+            Event::UserEvent(SetupMsg::Script(script)) => {
+                let _ = view.evaluate_script(&script);
+                window.set_visible(true);
+            }
             _ => {}
         }
     });
@@ -3583,6 +4540,7 @@ fn uninstall_app(wipe: bool, step: impl Fn(u32, &str)) -> Result<(), Box<dyn std
     let script = uninstall_script(&exe.to_string_lossy(), &link.to_string_lossy(), &desktop.to_string_lossy(), wipe.then_some(&*data_text), std::process::id());
     step(50, if wipe { "Removing shortcuts, Windows entries and your data" } else { "Removing shortcuts and Windows entries" });
     powershell(&script)?.wait()?;
+    let _ = std::fs::remove_file(data.join(INSTALL_POINTER)); // the next install starts from the default again
     step(85, "Removing program files");
     powershell(&remove_folder_script(&dir.to_string_lossy(), std::process::id()))?;
     step(100, "Finishing");
@@ -3716,6 +4674,18 @@ fn choose_download_path(owner: isize, path: &mut PathBuf) -> bool {
 }
 
 /// Every setting comes back valid, whether it came from the panel or a hand-edited file.
+// Each icon beside the address bar: its name, its default, and whether "only when needed" means anything for it.
+const TOOLBAR_ICONS: &[(&str, &str, bool)] = &[("extensions", "show", false), ("downloads", "auto", true), ("shield", "auto", true), ("private", "show", false), ("music", "show", false), ("reader", "auto", true), ("star", "show", false)];
+
+fn sanitize_toolbar(raw: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for (name, default, has_auto) in TOOLBAR_ICONS {
+        let choice = raw[*name].as_str().filter(|c| *c == "show" || *c == "hide" || (*c == "auto" && *has_auto)).unwrap_or(default);
+        out.insert(name.to_string(), json!(choice));
+    }
+    Value::Object(out)
+}
+
 fn sanitize_settings(raw: &Value) -> Value {
     let theme = raw["theme"].as_str().filter(|t| ["system", "light", "dark"].contains(t)).unwrap_or("system");
     let accent = raw["accent"].as_str().filter(|a| a.len() == 7 && a.starts_with('#') && a.is_char_boundary(1) && a[1..].chars().all(|c| c.is_ascii_hexdigit())).unwrap_or(DEFAULT_ACCENT);
@@ -3735,6 +4705,8 @@ fn sanitize_settings(raw: &Value) -> Value {
         "adblock": raw["adblock"] != false,
         "download_dir": raw["download_dir"].as_str().filter(|d| Path::new(d).is_absolute()).map_or_else(default_download_dir, str::to_string),
         "search_suggest": raw["search_suggest"] != false,
+        "agent_mode": raw["agent_mode"] == true,
+        "toolbar": sanitize_toolbar(&raw["toolbar"]),
         "auto_update": raw["auto_update"] != false,
         "download_ask": raw["download_ask"] == true,
         "download_show": raw["download_show"] != false,
@@ -3902,7 +4874,7 @@ mod tests {
 
     #[test]
     fn agent_port_is_opt_in_and_local_only() {
-        assert!(!browser_args(false).contains("remote-debugging"));
+        assert!(!browser_args(false).contains("remote-debugging")); // what Riffle's own interface gets in agent mode
         let args = browser_args(true);
         assert!(args.contains("--remote-debugging-port=9222") && args.contains("--remote-debugging-address=127.0.0.1"));
     }
@@ -3919,7 +4891,8 @@ mod tests {
         assert_eq!(key_shortcut(0x54, false), Some("new_tab"));
         assert_eq!(key_shortcut(0x54, true), Some("reopen_tab"));
         assert_eq!(key_shortcut(0x09, true), Some("prev_tab"));
-        assert_eq!(key_shortcut(0x4E, false), None); // plain Ctrl+N
+        assert_eq!(key_shortcut(0x4E, false), Some("new_window"));
+        assert_eq!(key_shortcut(0x47, false), None); // plain Ctrl+G
         assert_eq!(key_shortcut(0x41, false), None); // Ctrl+A stays the page's
         assert_eq!(key_shortcut(0xBB, true), Some("zoom_in"));
         assert_eq!(key_shortcut(0x6B, false), Some("zoom_in"));
@@ -3945,8 +4918,8 @@ mod tests {
     #[test]
     fn bad_settings_fall_back_and_good_ones_stay() {
         let bad = sanitize_settings(&json!({"theme": "x", "accent": "red;}", "search": "javascript:alert(1)//", "home": "file:///c:/x", "adblock": "no", "max_live_tabs": 999}));
-        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "auto_update": true, "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
-        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "auto_update": false, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
+        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "auto_update": true, "agent_mode": false, "toolbar": sanitize_toolbar(&Value::Null), "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
+        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "auto_update": false, "agent_mode": true, "toolbar": {"extensions": "hide", "downloads": "show", "shield": "hide", "private": "show", "music": "hide", "reader": "auto", "star": "show"}, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
         assert_eq!(sanitize_settings(&good), good);
         assert_eq!(sanitize_settings(&Value::Null)["adblock"], true);
     }
@@ -4075,6 +5048,23 @@ mod tests {
     }
 
     #[test]
+    fn a_chosen_folder_is_never_one_uninstalling_could_empty() {
+        assert_eq!(riffle_folder(Path::new("D:\\Apps")), Path::new("D:\\Apps\\Riffle"));
+        assert_eq!(riffle_folder(Path::new("D:\\")), Path::new("D:\\Riffle"));
+        assert_eq!(riffle_folder(Path::new("D:\\riffle")), Path::new("D:\\riffle"));
+        let base = std::env::temp_dir().join(format!("riffle-folder-test-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        assert_eq!(folder_problem(&base.join("new")), None);
+        assert_eq!(folder_problem(&base), None);
+        std::fs::write(base.join("holiday.jpg"), b"x").unwrap();
+        assert!(folder_problem(&base).is_some());
+        std::fs::write(base.join("riffle-browser.exe"), b"x").unwrap();
+        assert_eq!(folder_problem(&base), None); // an earlier Riffle, being updated
+        std::fs::remove_dir_all(&base).unwrap();
+        assert!(folder_problem(Path::new("Riffle")).is_some());
+    }
+
+    #[test]
     fn install_scripts_survive_awkward_paths() {
         assert_eq!(ps_quote("C:\\O'Neil\\x"), "'C:\\O''Neil\\x'");
         assert_eq!(base64(b"Man"), "TWFu");
@@ -4156,6 +5146,62 @@ mod tests {
         assert_eq!(next_zoom(0.25, "out"), 0.25);
         assert_eq!(next_zoom(3.0, "reset"), 1.0);
         assert_eq!(next_zoom(1.0, "nonsense"), 1.0);
+    }
+
+    #[test]
+    fn failures_get_plain_words_and_nothing_else_gets_a_page() {
+        assert_eq!(error_page_text(COREWEBVIEW2_WEB_ERROR_STATUS_DISCONNECTED).unwrap().0, "No internet connection");
+        assert_eq!(error_page_text(COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED).unwrap().0, "This site can't be found");
+        assert!(error_page_text(COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED).is_none()); // the user pressed stop
+        assert!(error_page_text(COREWEBVIEW2_WEB_ERROR_STATUS_CONNECTION_ABORTED).is_none()); // downloads end like this
+        assert!(error_page_text(COREWEBVIEW2_WEB_ERROR_STATUS_VALID_AUTHENTICATION_CREDENTIALS_REQUIRED).is_none());
+        let page = error_page(error_page_look(COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT), "A<b>", "x", &["t&u"], "<site>", "Go", false);
+        assert!(page.contains("<circle") && page.contains("data-tone=\"warning\""));
+        assert_eq!(error_page_look(COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_EXPIRED).1, "danger");
+        assert!(page.contains("A&lt;b&gt;") && page.contains("<li>t&amp;u</li>") && page.contains("&lt;site&gt;") && !page.contains("__"), "{page}");
+    }
+
+    #[test]
+    fn toolbar_choices_stay_valid() {
+        let picked = sanitize_toolbar(&json!({"star": "hide", "private": "auto", "shield": "show", "downloads": "nonsense"}));
+        assert_eq!(picked["star"], "hide");
+        assert_eq!(picked["private"], "show"); // "when needed" means nothing for this one
+        assert_eq!(picked["shield"], "show");
+        assert_eq!(picked["downloads"], "auto");
+    }
+
+    #[test]
+    fn months_come_out_right() {
+        assert_eq!(month_key(0), "1970-01");
+        assert_eq!(month_key(1_793_646_873), "2026-11");
+        assert_eq!(month_key(1_709_164_800), "2024-02"); // 29 February 2024
+        assert_eq!(month_key(1_735_689_599), "2024-12");
+        assert_eq!(month_key(1_735_689_600), "2025-01");
+    }
+
+    #[test]
+    fn pinned_tabs_keep_their_group() {
+        assert_eq!(tab_position(5, 2, 6, true), 1);
+        assert_eq!(tab_position(0, 2, 6, true), 0);
+        assert_eq!(tab_position(0, 2, 6, false), 2);
+        assert_eq!(tab_position(9, 2, 6, false), 5);
+        assert_eq!(tab_position(3, 0, 4, false), 3);
+    }
+
+    #[test]
+    fn import_takes_web_bookmarks_once_and_keeps_existing_names() {
+        let file = json!({"roots": {"bookmark_bar": {"type": "folder", "children": [
+            {"type": "url", "name": "A", "url": "https://a.test/"},
+            {"type": "url", "name": "Sneaky", "url": "javascript:alert(1)"},
+            {"type": "folder", "children": [{"type": "url", "name": "B", "url": "https://b.test/"}]},
+        ]}, "other": {"type": "folder", "children": [{"type": "url", "name": "A again", "url": "https://a.test/"}]}}}).to_string();
+        let found = parse_browser_bookmarks(&file);
+        assert_eq!(found.len(), 3);
+        let mut marks = vec![json!({"url": "https://b.test/", "title": "Mine"})];
+        assert_eq!(merge_bookmarks(&mut marks, found), 1);
+        assert_eq!(marks[0]["title"], "Mine");
+        assert_eq!(marks.len(), 2);
+        assert!(parse_browser_bookmarks("not json").is_empty());
     }
 
     #[test]

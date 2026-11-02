@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle tab menu</title>
+<style>
+:root { --bar: #fff; --ink: #14212b; --hover: #d7e6ec; color-scheme: light; }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --hover: #3a4a52; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { padding: 8px 0; }
+button { display: block; width: 100%; height: 32px; padding: 0 16px; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button:hover:enabled, button:focus { background: var(--hover); outline: none; }
+button:disabled { opacity: .55; }
+</style>
+<div id="items" role="menu" aria-label="Tab menu"></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+function render(state) {
+  document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  document.getElementById('items').replaceChildren(...[[state.pinned ? 'Unpin tab' : 'Pin tab', 'pin'], ['Move to new window', 'window', state.alone], ['Move to start', 'start', state.alone], ['Move to end', 'end', state.alone], ['Close tab', 'close'], ['Close other tabs', 'others', state.alone]].map(([label, value, off]) => {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitem');
+    b.textContent = label;
+    b.disabled = !!off;
+    b.onclick = () => send('tab_pick', {value});
+    return b;
+  }));
+  document.querySelector('button').focus();
+}
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') return send('tab_menu_close');
+  const all = [...document.querySelectorAll('button:enabled')], at = all.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') { e.preventDefault(); all[(at + 1) % all.length].focus(); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); all[(at + all.length - 1) % all.length].focus(); }
+});
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('tab_menu_close'); }, 100));
+send('tab_menu_ready');
+</script>
+</html>

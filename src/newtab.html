@@ -12,10 +12,16 @@ html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); 
 body { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 12vh 24px 24px; overflow-y: auto; }
 #name { margin: 0; font: 72px/1 Gabriola, Georgia, serif; color: var(--tint); user-select: none; }
 form { width: min(600px, 100%); }
-input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 21px; box-shadow: var(--shadow); background: var(--field); color: inherit; font: 14px "Segoe UI", sans-serif; }
+input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 21px; background: var(--field); color: inherit; font: 14px "Segoe UI", sans-serif; }
 input::placeholder { color: var(--muted); opacity: 1; }
 input:focus { outline: 2px solid var(--tint); outline-offset: -2px; }
 p { margin: 0; color: var(--muted); line-height: 20px; }
+#marks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: min(720px, 100%); }
+#marks:empty { display: none; }
+#marks button { max-width: 168px; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--field); color: inherit; font: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
+#marks button:hover { outline: 1px solid var(--line); }
+#marks button:focus-visible { outline: 2px solid var(--tint); }
+#blocked[hidden] { display: none; }
 #note { width: min(600px, 100%); }
 #note[hidden] { display: none; }
 h1 { margin: 0 0 8px; font-size: 20px; font-weight: 500; line-height: 28px; }
@@ -26,6 +32,8 @@ ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 24px; }
 </style>
 <h1 id="name">Riffle</h1>
 <form id="go"><input id="q" aria-label="Search or enter address" placeholder="Search or enter address" spellcheck="false" autocomplete="off" autofocus></form>
+<nav id="marks" aria-label="Top bookmarks"></nav>
+<p id="blocked" hidden></p>
 <section id="note" hidden>
   <h1>You're browsing privately</h1>
   <p>Others who use this device won't see your activity here. This doesn't change how websites you visit and the services they use collect data. Downloads and bookmarks will be saved.</p>
@@ -39,6 +47,17 @@ ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 24px; }
 const root = document.documentElement, theme = root.dataset.theme;
 root.classList.toggle('dark', theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
 document.getElementById('note').hidden = root.dataset.private !== 'true';
+const marks = __MARKS__;
+document.getElementById('marks').replaceChildren(...marks.map(m => {
+  const b = document.createElement('button');
+  b.textContent = m.title || m.url; // textContent: titles come from web pages
+  b.title = m.url;
+  b.onclick = () => window.ipc.postMessage('go:' + m.url);
+  return b;
+}));
+const count = Number('__BLOCKED__');
+const said = document.getElementById('blocked');
+if (count) { said.textContent = count.toLocaleString() + ' ads and trackers blocked this month'; said.hidden = false; }
 document.getElementById('go').onsubmit = e => {
   e.preventDefault();
   window.ipc.postMessage('go:' + document.getElementById('q').value);

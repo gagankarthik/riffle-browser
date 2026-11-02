@@ -10,7 +10,7 @@
 svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 html, body { margin: 0; height: 100%; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; }
 body { display: flex; }
-nav { flex: none; display: flex; flex-direction: column; gap: 4px; width: 220px; padding: 16px 12px; background: var(--strip); overflow-y: auto; position: relative; z-index: 1; box-shadow: 1px 0 10px rgb(16 40 60 / .12); }
+nav { flex: none; display: flex; flex-direction: column; gap: 4px; width: 220px; padding: 16px 12px; background: var(--strip); overflow-y: auto; position: relative; z-index: 1; }
 #brand { display: flex; align-items: center; gap: 10px; padding: 4px 12px 16px; font-size: 18px; font-weight: 600; }
 #brand svg { width: 28px; height: 28px; flex: none; }
 nav button { flex: none; display: flex; align-items: center; gap: 12px; width: 100%; height: 36px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; }
@@ -88,9 +88,8 @@ nav svg.i { flex: none; width: 16px; height: 16px; color: var(--tint); }
 .field label[for] { cursor: default; align-self: stretch; }
 .field label .sub { margin-top: 2px; font-weight: 400; }
 .open:hover { background: var(--hover); border-radius: 8px; }
-button.plain { transition: box-shadow .12s ease-out; }
-button.plain:hover { box-shadow: var(--shadow); }
-button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow: none; }
+button.plain:hover { background: var(--hover); }
+button.plain:disabled { color: var(--off); border-color: var(--line); background: none; }
 #make-default:enabled, #mark-save { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
 .pick-list, #confirm-box { box-shadow: var(--shadow); }
 [hidden] { display: none !important; }
@@ -108,10 +107,68 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
 #task-table .asleep .name { font-weight: 400; }
 #task-table tbody tr:hover td { background: var(--hover); }
 #task-table .many { margin-left: 8px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.lead, .sub-note, .sec-note { color: var(--muted); }
+.sec-note { margin: 12px 0 4px; }
+#rows.by-day { padding: 0; border: 0; background: none; }
+.day { margin: 24px 0 8px; font-size: 14px; font-weight: 600; }
+.day:first-child { margin-top: 4px; }
+.visits { padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--bar); }
+.visit { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 4px 0 12px; border-radius: 8px; }
+.visit:hover { background: var(--hover); }
+.visit time { flex: none; width: 72px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.visit-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.visit-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+.visit-site { flex: none; max-width: 40%; overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; text-overflow: ellipsis; }
+.visit-open:hover .visit-title { text-decoration: underline; }
+.visit .remove { opacity: 0; transition: opacity .12s ease-out; }
+.visit:hover .remove, .visit .remove:focus-visible { opacity: 1; }
+@media (hover: none) { .visit .remove { opacity: 1; } }
+.lead { margin: -8px 0 20px; }
+#ext-status { margin-left: 12px; color: var(--muted); }
+#ext-rows:empty { display: none; }
+#import-note { margin: 0 0 12px; color: var(--muted); }
+.ext-actions { display: flex; align-items: center; gap: 12px; }
 #about-head { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 #about-head strong { display: block; font-size: 20px; }
 .about-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-@media (max-width: 560px) { nav { width: 128px; } main { padding: 16px; } }
+/* One page style: flat on the page, 4px spacing steps, one row height for lists, one for settings. */
+main { padding: 32px 40px; background: var(--bar); }
+main > * { max-width: 760px; }
+h1 { margin: 0 0 16px; font-size: 24px; line-height: 32px; }
+.head { gap: 8px; margin-bottom: 16px; }
+.head input[type=search], .head button.plain { height: 36px; }
+.sec, #rows { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; }
+.sec h2 { margin: 32px 0 4px; font-size: 14px; line-height: 20px; color: var(--ink); }
+#sec-general > h2:first-child { margin-top: 0; }
+.sec-note { margin: 0 0 8px; }
+.field { gap: 8px 32px; min-height: 56px; padding: 8px 0; }
+.field label { font-weight: 400; }
+.field label[for] { align-self: center; }
+.field .sub { margin-top: 2px; font-size: 12px; line-height: 16px; }
+.field input[type=text], .field select, .pick { width: 240px; }
+/* Lists */
+.row, .visit { gap: 8px; min-height: 44px; margin-inline: -8px; padding: 0 4px 0 8px; border: 0; border-radius: 8px; }
+.row:hover, .visit:hover { background: var(--hover); }
+.open { padding: 4px 0; }
+.open:hover { background: none; }
+.row .remove, .visit .remove { opacity: 0; }
+.row:hover .remove, .visit:hover .remove, .row .remove:focus-visible, .visit .remove:focus-visible { opacity: 1; }
+@media (hover: none) { .row .remove, .visit .remove { opacity: 1; } }
+.visits { padding: 0; border: 0; border-radius: 0; background: none; }
+.day { margin: 24px 0 4px; font-size: 13px; line-height: 20px; color: var(--muted); }
+.day:first-child { margin-top: 0; }
+.visit-title { flex: 1; font-weight: 400; }
+.visit-site { max-width: 30%; }
+.visit time { width: 64px; }
+.visit-open:hover .visit-title { text-decoration: none; }
+#mark-form { margin-bottom: 16px; padding: 12px; border-radius: 8px; background: var(--strip); }
+#mark-new { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; white-space: nowrap; }
+#mark-new:hover { background: var(--fill); }
+#import-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; color: var(--muted); }
+#import-row span { margin-right: auto; }
+#import-note { flex-basis: 100%; margin: 0; }
+@media (max-width: 640px) { .visit-site { display: none; } .visit time { width: 60px; } .visit { gap: 8px; } }
+@media (max-width: 560px) { nav { width: 128px; } main { padding: 16px; } .field input[type=text], .field select, .pick { width: 100%; } }
 @media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
 </style>
 <!--ICONS-->
@@ -120,12 +177,14 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
   <button data-page="bookmarks">Bookmarks</button>
   <button data-page="history">History</button>
   <button data-page="downloads">Downloads</button>
+  <button data-page="extensions">Extensions</button>
   <button data-page="tasks">Task manager</button>
   <button data-page="settings">Settings</button>
   <button data-sec="general">General</button>
   <button data-sec="search">Search engine</button>
   <button data-sec="browser">Default browser</button>
   <button data-sec="files">Downloads</button>
+  <button data-sec="toolbar">Toolbar</button>
   <button data-sec="about">About Riffle</button>
   <button id="done">Back to page</button>
 </nav>
@@ -134,6 +193,7 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
     <h1 id="heading"></h1>
     <div class="head">
       <input id="filter" type="search" aria-label="Search this list" placeholder="Search">
+      <button class="plain" id="mark-new">Add bookmark</button>
       <button class="plain" id="clear-history">Clear history</button>
       <button class="plain" id="clear-downloads">Clear list</button>
     </div>
@@ -145,6 +205,19 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
       <p id="mark-error" class="error" role="alert" hidden></p>
     </form>
     <div id="rows"></div>
+    <div id="import-row" hidden>
+      <span>Bring bookmarks from another browser</span>
+      <button class="plain" id="import-chrome">Import from Chrome</button>
+      <button class="plain" id="import-edge">Import from Edge</button>
+      <p id="import-note" role="status" hidden></p>
+    </div>
+  </section>
+  <section id="extensions" hidden>
+    <h1>Extensions</h1>
+    <p class="lead">Add an extension from a folder you have unpacked. Only add ones you trust, because an extension can read the pages you visit.</p>
+    <div class="head"><button class="plain" id="ext-add">Add from folder</button><span id="ext-status" role="status"></span></div>
+    <div class="sec" id="ext-rows"></div>
+    <p class="sub-note">The Chrome Web Store can't install into Riffle. Extensions run on pages, but their toolbar buttons and pop-ups don't appear, and private windows don't use them.</p>
   </section>
   <section id="tasks" hidden>
     <h1>Task manager</h1>
@@ -192,6 +265,16 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
       <div class="field"><label for="idle_sleep">Sleep tabs left idle for 5 minutes<span class="sub">Saves memory. Text typed but not sent in a sleeping tab is lost. Tabs playing music stay awake</span></label><input id="idle_sleep" type="checkbox"></div>
       <div class="field"><label for="max">Tabs kept awake<span class="sub">Fewer uses less memory. Others reload when selected</span></label><input id="max" type="number" min="1" max="32"></div>
       </div>
+      <div id="sec-toolbar" class="sec">
+        <p class="sec-note">Choose what shows beside the address bar. Anything hidden stays in the three dots menu.</p>
+        <div class="field"><label for="tb-star">Bookmark star</label><select id="tb-star" data-icon="star"></select></div>
+        <div class="field"><label for="tb-reader">Reader mode<span class="sub">When needed: on pages that look like articles</span></label><select id="tb-reader" data-icon="reader" data-auto></select></div>
+        <div class="field"><label for="tb-extensions">Extensions</label><select id="tb-extensions" data-icon="extensions"></select></div>
+        <div class="field"><label for="tb-downloads">Downloads<span class="sub">When needed: during a download and for 5 minutes after</span></label><select id="tb-downloads" data-icon="downloads" data-auto></select></div>
+        <div class="field"><label for="tb-shield">Ad blocker<span class="sub">When needed: on sites where it stopped something, or is turned off</span></label><select id="tb-shield" data-icon="shield" data-auto></select></div>
+        <div class="field"><label for="tb-private">Private window</label><select id="tb-private" data-icon="private"></select></div>
+        <div class="field"><label for="tb-music">Music and volume</label><select id="tb-music" data-icon="music"></select></div>
+      </div>
     </form>
     <div id="sec-browser" class="sec">
     <div class="field"><label>Default browser<span class="sub" id="default-note"></span></label><button class="plain" id="make-default">Make default</button></div>
@@ -199,6 +282,7 @@ button.plain:disabled { color: var(--off); border-color: var(--line); box-shadow
     <div id="sec-about" class="sec">
     <div id="about-head"><svg viewBox="0 0 32 32" width="56" height="56" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.8 9 0t9 0M7 21q4.5-4.8 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg><div><strong>Riffle</strong><span class="sub" id="about-version"></span></div></div>
     <div class="field"><label>Updates<span class="sub" id="update-note" role="status"></span></label><button class="plain" id="check-updates">Check for updates</button></div>
+    <div class="field"><label for="agent_mode">Allow AI agents to control Riffle<span class="sub">Starts next time you open Riffle. Any program on this PC could then control the browser, including sites you're logged in to</span></label><input id="agent_mode" type="checkbox"></div>
     <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub">Asks GitHub for a newer version once a day, and sends nothing else</span></label><input id="auto_update" type="checkbox"></div>
     <div class="field"><label>Browser engine<span class="sub" id="engine-note"></span></label></div>
     <div class="field"><label>Learn more<span class="sub">Free and open source under the MIT license</span></label><div class="about-links"><button class="plain" data-link="website">Website</button><button class="plain" data-link="notes">Release notes</button><button class="plain" data-link="source">Source code</button><button class="plain" data-link="license">License</button></div></div>
@@ -232,7 +316,7 @@ const icon = name => {
   return svg;
 };
 const ROW_LIMIT = 500; // the search box reaches older entries without building thousands of rows
-let state = null, theme = 'system';
+let state = null, theme = 'system', shownPage = null;
 const darkMedia = matchMedia('(prefers-color-scheme: dark)');
 const applyTheme = () => document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && darkMedia.matches));
 darkMedia.onchange = applyTheme;
@@ -343,8 +427,81 @@ function showExceptions() {
   $('sites-row').hidden = !rows.length;
 }
 
+function dayLabel(seconds) {
+  const when = new Date(seconds * 1000), today = new Date();
+  const days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()) - new Date(when.getFullYear(), when.getMonth(), when.getDate())) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return when.toLocaleDateString(undefined, {weekday: 'long', year: when.getFullYear() === today.getFullYear() ? undefined : 'numeric', month: 'long', day: 'numeric'});
+}
+
+function historyRow(entry) {
+  const div = document.createElement('div');
+  div.className = 'visit';
+  const time = document.createElement('time');
+  time.textContent = entry.time ? new Date(entry.time * 1000).toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'}) : '';
+  const open = document.createElement('button');
+  open.className = 'visit-open';
+  open.title = entry.url;
+  const title = document.createElement('span');
+  title.className = 'visit-title';
+  title.textContent = entry.title || entry.url; // textContent: page titles must never become markup here
+  const site = document.createElement('span');
+  site.className = 'visit-site';
+  try { site.textContent = new URL(entry.url).hostname.replace(/^www\./, ''); } catch { site.textContent = entry.url; }
+  open.append(title, site);
+  open.onclick = () => send('go', {value: entry.url});
+  const x = document.createElement('button');
+  x.className = 'remove';
+  x.append(icon('close'));
+  x.title = 'Remove from history';
+  x.setAttribute('aria-label', 'Remove from history: ' + (entry.title || entry.url));
+  x.onclick = () => send('remove_history', {value: entry.url, time: entry.time});
+  div.append(time, open, x);
+  return div;
+}
+
+function showHistory() {
+  const needle = $('filter').value.toLowerCase();
+  const found = state.history.filter(e => (e.title + ' ' + e.url).toLowerCase().includes(needle));
+  const rows = $('rows');
+  rows.classList.add('by-day');
+  $('clear-history').disabled = !state.history.length;
+  if (!found.length) {
+    const none = document.createElement('p');
+    none.className = 'empty';
+    none.textContent = needle ? 'No history matches your search' : 'Pages you visit will appear here';
+    rows.replaceChildren(none);
+    return;
+  }
+  const parts = [];
+  let day = null, group = null;
+  for (const entry of found.slice(0, ROW_LIMIT)) {
+    const label = entry.time ? dayLabel(entry.time) : 'Earlier';
+    if (label !== day) {
+      day = label;
+      const heading = document.createElement('h2');
+      heading.className = 'day';
+      heading.textContent = label;
+      group = document.createElement('div');
+      group.className = 'visits';
+      parts.push(heading, group);
+    }
+    group.append(historyRow(entry));
+  }
+  if (found.length > ROW_LIMIT) {
+    const more = document.createElement('p');
+    more.className = 'empty';
+    more.textContent = `Showing the latest ${ROW_LIMIT}. Search to find older pages.`;
+    parts.push(more);
+  }
+  rows.replaceChildren(...parts);
+}
+
 function showList() {
+  $('rows').classList.remove('by-day');
   if (state.page === 'downloads') return showDownloads();
+  if (state.page === 'history') return showHistory();
   const bookmarks = state.page === 'bookmarks';
   const needle = $('filter').value.toLowerCase();
   const all = bookmarks ? state.bookmarks : state.history;
@@ -353,19 +510,24 @@ function showList() {
   if (!rows.length) {
     const p = document.createElement('p');
     p.className = 'empty';
-    p.textContent = needle ? 'Nothing matches.' : bookmarks ? 'No bookmarks yet. Add one above, or press Ctrl+D on a page.' : 'No history yet.';
+    p.textContent = needle ? 'Nothing matches.' : bookmarks ? 'No bookmarks yet. Press Ctrl+D on a page, or select Add bookmark.' : 'No history yet.';
     rows.push(p);
   }
   $('rows').replaceChildren(...rows);
 }
 
-let editing = null;
+let editing = null, formOpen = false;
+function openForm(open) {
+  formOpen = open;
+  $('mark-form').hidden = !open;
+}
 function editMark(entry) {
+  openForm(!!entry);
   editing = entry ? entry.url : null;
   $('mark-title').value = entry ? entry.title : '';
   $('mark-url').value = entry ? entry.url : '';
   $('mark-save').textContent = entry ? 'Save' : 'Add';
-  $('mark-cancel').hidden = !entry;
+  $('mark-cancel').hidden = false;
   $('mark-error').hidden = true;
   if (entry) $('mark-title').focus();
 }
@@ -504,6 +666,8 @@ function showSettings(s) {
   $('download-dir').textContent = s.download_dir;
   $('search_suggest').checked = s.search_suggest;
   $('auto_update').checked = s.auto_update;
+  for (const sel of document.querySelectorAll('[data-icon]')) sel.value = s.toolbar[sel.dataset.icon];
+  $('agent_mode').checked = s.agent_mode;
   $('download_ask').checked = s.download_ask;
   $('download_show').checked = s.download_show;
   refreshPicks.forEach(f => f());
@@ -513,7 +677,11 @@ function showSettings(s) {
 
 let section = 'general';
 function showSection() {
-  for (const el of document.querySelectorAll('.sec')) el.hidden = !el.id.startsWith('sec-' + section);
+  for (const el of document.querySelectorAll('.sec')) {
+    const was = el.hidden;
+    el.hidden = !el.id.startsWith('sec-' + section);
+    if (was && !el.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) el.animate([{opacity: 0, transform: 'translateY(6px)'}, {opacity: 1, transform: 'none'}], {duration: 160, easing: 'ease-out'});
+  }
   for (const b of document.querySelectorAll('nav [data-sec]')) {
     if (b.dataset.sec === section) { b.setAttribute('aria-current', 'page'); $('sec-title').textContent = b.textContent; } else b.removeAttribute('aria-current');
   }
@@ -541,15 +709,25 @@ function render(next) {
   $('check-updates').disabled = !next.installed || !!next.update_ready || next.update_status === 'checking';
   $('app-action').textContent = next.installed ? 'Uninstall Riffle' : 'Install Riffle';
   $('app-action').onclick = () => next.installed ? send('uninstall_app') : send('install_app');
+  if (next.page !== shownPage) {
+    shownPage = next.page;
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelector('main').animate([{opacity: 0, transform: 'translateY(6px)'}, {opacity: 1, transform: 'none'}], {duration: 160, easing: 'ease-out'});
+  }
   $('settings').hidden = !settings;
-  $('list').hidden = settings || next.page === 'tasks';
+  const own = ['tasks', 'extensions'].includes(next.page);
+  $('list').hidden = settings || own;
   $('tasks').hidden = next.page !== 'tasks';
+  $('extensions').hidden = next.page !== 'extensions';
+  if (next.import_status) $('import-note').textContent = next.import_status;
+  $('import-note').hidden = !next.import_status || next.page !== 'bookmarks';
+  $('import-row').hidden = $('mark-new').hidden = next.page !== 'bookmarks';
   if (next.page === 'tasks') send('tasks_refresh');
-  else if (!settings) {
+  else if (next.page === 'extensions') send('ext_refresh');
+  else if (!settings && !own) {
     $('heading').textContent = {bookmarks: 'Bookmarks', history: 'History', downloads: 'Downloads'}[next.page];
     $('clear-downloads').hidden = next.page !== 'downloads';
     $('clear-history').hidden = next.page !== 'history';
-    $('mark-form').hidden = next.page !== 'bookmarks';
+    $('mark-form').hidden = next.page !== 'bookmarks' || !formOpen;
     editMark(null);
     showList();
   }
@@ -559,14 +737,41 @@ for (const b of document.querySelectorAll('nav [data-page]')) {
   b.onclick = () => { $('filter').value = ''; send('panel', {value: b.dataset.page}); };
 }
 for (const b of document.querySelectorAll('nav [data-sec]')) b.onclick = () => { section = b.dataset.sec; showSection(); };
-for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download'], ['about', 'info']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
+for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download'], ['toolbar', 'sliders'], ['about', 'info']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
 $('make-default').onclick = () => send(state.installed ? 'make_default' : 'install_app');
 $('download-change').onclick = () => send('choose_download_dir');
 $('mark-cancel').onclick = () => editMark(null);
+$('mark-new').onclick = () => { editMark(null); openForm(true); $('mark-title').focus(); };
 $('mark-form').onsubmit = e => {
   e.preventDefault();
   send('put_bookmark', {old: editing, title: $('mark-title').value, url: $('mark-url').value});
 };
+for (const [id, value] of [['import-chrome', 'chrome'], ['import-edge', 'edge']]) $(id).onclick = () => send('import_bookmarks', {value});
+$('ext-add').onclick = () => send('ext_add');
+function renderExtensions({rows, status}) {
+  $('ext-status').textContent = status || (rows.length ? '' : 'No extensions yet');
+  $('ext-rows').replaceChildren(...rows.map(r => {
+    const row = document.createElement('div');
+    row.className = 'field';
+    const name = document.createElement('label');
+    name.textContent = r.name; // textContent: names come from the extension
+    const actions = document.createElement('div');
+    actions.className = 'ext-actions';
+    const on = document.createElement('input');
+    on.type = 'checkbox';
+    on.checked = r.on;
+    on.setAttribute('aria-label', 'Turn on ' + r.name);
+    on.onchange = () => send('ext_toggle', {id: r.id, value: on.checked});
+    const remove = document.createElement('button');
+    remove.className = 'plain';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', 'Remove ' + r.name);
+    remove.onclick = () => send('ext_remove', {id: r.id});
+    actions.append(on, remove);
+    row.append(name, actions);
+    return row;
+  }));
+}
 for (const b of document.querySelectorAll('[data-link]')) b.onclick = () => send('about_link', {link: b.dataset.link});
 $('check-updates').onclick = () => send('check_updates');
 const megabytes = bytes => `${(bytes / 1048576).toFixed(bytes < 104857600 ? 1 : 0)} MB`;
@@ -606,7 +811,7 @@ function renderTasks(rows) {
   }));
 }
 setInterval(() => { if (state?.page === 'tasks') send('tasks_refresh'); }, 2000);
-for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['tasks', 'tasks'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
+for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['extensions', 'extension'], ['tasks', 'tasks'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
 $('done').prepend(icon('back'));
 $('done').onclick = () => send('close_panel');
 $('filter').oninput = showList;
@@ -618,6 +823,8 @@ $('engine').onchange = () => {
   if ($('engine').value === 'custom') { $('custom-row').hidden = false; $('custom').focus(); } else save();
 };
 $('form').onchange = e => { if (e.target !== $('engine')) save(); };
+$('auto_update').onchange = $('agent_mode').onchange = save;
+for (const sel of document.querySelectorAll('[data-icon]')) sel.append(...[['show', 'Always show'], ...(sel.hasAttribute('data-auto') ? [['auto', 'Only when needed']] : []), ['hide', 'Hide']].map(([value, label]) => Object.assign(document.createElement('option'), {value, textContent: label})));
 $('form').onsubmit = e => { e.preventDefault(); save(); };
 function save() {
   const engine = $('engine').value;
@@ -636,6 +843,8 @@ function save() {
     download_dir: state.settings.download_dir,
     search_suggest: $('search_suggest').checked,
     auto_update: $('auto_update').checked,
+    agent_mode: $('agent_mode').checked,
+    toolbar: Object.fromEntries([...document.querySelectorAll('[data-icon]')].map(sel => [sel.dataset.icon, sel.value])),
     download_ask: $('download_ask').checked,
     download_show: $('download_show').checked,
   }});

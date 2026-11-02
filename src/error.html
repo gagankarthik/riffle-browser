@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en" data-tone="__TONE__">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>__TITLE__</title>
+<style>
+:root { --bg: #f4f7f9; --card: #fff; --ink: #14212b; --muted: #46555f; --line: #d9e2e7; --tone: #085770; color-scheme: light; }
+:root[data-tone=warning] { --tone: #8a5300; }
+:root[data-tone=danger] { --tone: #b3261e; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1a1e21; --card: #262b2f; --ink: #edf1f4; --muted: #c3ccd2; --line: #3f464b; --tone: #8fd0e6; color-scheme: dark; }
+  :root[data-tone=warning] { --tone: #f5c66b; }
+  :root[data-tone=danger] { --tone: #f2b8b5; }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font: 15px/1.5 "Segoe UI", sans-serif; }
+body { display: grid; place-items: center; padding: 24px; background: var(--bg); color: var(--ink); }
+main { width: min(480px, 100%); padding: 32px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+svg { display: block; width: 32px; height: 32px; margin-bottom: 16px; fill: none; stroke: var(--tone); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; line-height: 28px; }
+p { margin: 0; color: var(--muted); }
+ul { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
+ul:empty { display: none; }
+.site { margin-top: 12px; font-size: 13px; overflow-wrap: anywhere; }
+button { display: block; height: 36px; margin-top: 24px; padding: 0 16px; border: 0; border-radius: 8px; background: #0b6e8f; color: #fff; font: 600 14px "Segoe UI", sans-serif; cursor: pointer; transition: background-color .12s ease-out; }
+button:hover { background: #085770; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+@media (max-width: 480px) { body { padding: 12px; } main { padding: 24px; } }
+</style>
+<main>
+  <svg viewBox="0 0 24 24" aria-hidden="true">__ICON__</svg>
+  <h1>__TITLE__</h1>
+  <p>__DETAIL__</p>
+  <ul>__TIPS__</ul>
+  <p class="site">__SITE__</p>
+  <button id="again">__ACTION__</button>
+</main>
+<script>
+const retry = () => window.ipc.postMessage('crash_reload');
+document.getElementById('again').onclick = retry;
+// Back online, the page simply comes back.
+if (__RETRY_ONLINE__) addEventListener('online', retry);
+</script>
+</html>

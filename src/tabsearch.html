@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle tab search</title>
+<style>
+:root { --bar: #fff; --ink: #14212b; --muted: #46555f; --hover: #d7e6ec; --line: #8a9aa3; --field: #f1f5f7; color-scheme: light; }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --muted: #c3ccd2; --hover: #3a4a52; --line: #6d7a82; --field: #171b1e; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; }
+input { flex: none; height: 44px; margin: 8px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--field); color: inherit; font: 14px "Segoe UI", sans-serif; }
+#list { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; text-align: left; }
+button.on, button:hover { background: var(--hover); }
+button:focus { outline: none; }
+.t, .u { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.t { font-weight: 500; }
+.u { color: var(--muted); font-size: 12px; }
+.asleep .t { font-weight: 400; color: var(--muted); }
+p { margin: 16px 12px; color: var(--muted); }
+</style>
+<input id="q" aria-label="Search open tabs" placeholder="Search open tabs" spellcheck="false" autocomplete="off">
+<div id="list" role="listbox" aria-label="Open tabs"></div>
+<script>
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+const q = document.getElementById('q'), list = document.getElementById('list');
+let tabs = [], at = 0;
+function draw() {
+  const needle = q.value.trim().toLowerCase();
+  const found = tabs.filter(t => (t.title + ' ' + t.url).toLowerCase().includes(needle));
+  at = Math.min(at, Math.max(found.length - 1, 0));
+  if (!found.length) { const p = document.createElement('p'); p.textContent = 'No open tab matches'; list.replaceChildren(p); return; }
+  list.replaceChildren(...found.map((t, i) => {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'option');
+    b.setAttribute('aria-selected', String(i === at));
+    b.className = (i === at ? 'on ' : '') + (t.asleep ? 'asleep' : '');
+    const title = document.createElement('span'), url = document.createElement('span');
+    title.className = 't'; url.className = 'u';
+    title.textContent = t.title; // textContent: page titles must never become markup
+    url.textContent = (t.asleep ? 'Asleep, ' : '') + t.url;
+    b.append(title, url);
+    b.onclick = () => send('tab_search_pick', {id: t.id});
+    return b;
+  }));
+  list.children[at]?.scrollIntoView({block: 'nearest'});
+}
+function render(state) {
+  document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  tabs = state.tabs;
+  draw();
+  q.focus();
+}
+q.oninput = () => { at = 0; draw(); };
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') return send('tab_search_close');
+  const count = list.querySelectorAll('button').length;
+  if (e.key === 'ArrowDown' && count) { e.preventDefault(); at = (at + 1) % count; draw(); }
+  if (e.key === 'ArrowUp' && count) { e.preventDefault(); at = (at + count - 1) % count; draw(); }
+  if (e.key === 'Enter') list.querySelectorAll('button')[at]?.click();
+});
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('tab_search_close'); }, 100));
+send('tab_search_ready');
+</script>
+</html>

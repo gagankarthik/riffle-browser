@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="__THEME__">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<title>Welcome to Riffle</title>
+<style>
+:root { --accent: __ACCENT__; --bg: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --card: #fff; --ink: #14212b; --muted: #46555f; --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --hover: color-mix(in srgb, var(--accent) 18%, transparent); --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); color-scheme: light; }
+:root.dark { --bg: color-mix(in srgb, var(--accent) 3%, #1a1e21); --card: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --muted: #c3ccd2; --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --hover: color-mix(in srgb, var(--accent) 34%, transparent); --tint: oklch(from var(--accent) max(l, .8) c h); color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 56px 24px 72px; }
+header { display: flex; align-items: center; gap: 16px; }
+header svg { flex: none; width: 56px; height: 56px; }
+h1 { margin: 0; font-size: 34px; font-weight: 600; line-height: 1.15; }
+.version { margin: 2px 0 0; color: var(--muted); }
+.lead { margin: 20px 0 28px; font-size: 18px; }
+h2 { margin: 36px 0 12px; font-size: 18px; font-weight: 600; }
+.start { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px 20px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.start + .start { margin-top: 8px; }
+.start strong { display: block; font-weight: 600; }
+.start span { color: var(--muted); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+button { height: 36px; padding: 0 14px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: 14px "Segoe UI", sans-serif; cursor: pointer; transition: background-color .12s ease-out; }
+button:hover { background: var(--hover); }
+button.primary { border-color: var(--fill); background: var(--fill); color: #fff; font-weight: 600; }
+button.primary:hover { background: #085770; }
+:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 32px; margin: 0; }
+dl div { padding: 12px 0; border-bottom: 1px solid var(--line); }
+dt { font-weight: 600; }
+dd { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+kbd { padding: 0 4px; border: 1px solid var(--edge); border-radius: 4px; font: 12px "Segoe UI", sans-serif; }
+.done { margin-top: 32px; }
+@media (prefers-reduced-motion: no-preference) { main { animation: in .25s ease-out; } @keyframes in { from { opacity: 0; transform: translateY(8px); } } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
+</style>
+<main>
+  <header>
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#0b6e8f"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.800 9 0t9 0M7 21q4.5-4.800 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <div><h1>Welcome to Riffle</h1><p class="version">Version __VERSION__</p></div>
+  </header>
+  <p class="lead">Private by default, with ads and trackers already blocked and idle tabs freeing their memory. Here's what's new, and two quick things to set up if you want them.</p>
+
+  <h2>Get set up</h2>
+  <div class="start">
+    <div><strong>Bring your bookmarks</strong><span id="note" role="status">Only bookmarks are copied, never passwords</span></div>
+    <div class="actions"><button data-do="chrome">From Chrome</button><button data-do="edge">From Edge</button></div>
+  </div>
+  <div class="start">
+    <div><strong>Open links in Riffle</strong><span>Windows asks you to confirm</span></div>
+    <div class="actions"><button data-do="default">Make default</button></div>
+  </div>
+
+  <h2>New in this version</h2>
+  <dl>
+    <div><dt>Arrange your tabs</dt><dd>Drag to reorder, or drag a tab away from the strip to give it its own window. Right-click a tab for more.</dd></div>
+    <div><dt>Your toolbar, your way</dt><dd>Choose which icons show beside the address bar in Settings, Toolbar.</dd></div>
+    <div><dt>Pinned tabs</dt><dd>They stay small, stay awake and come back next time.</dd></div>
+    <div><dt>Search tabs</dt><dd>Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd> to find any open tab, even a sleeping one.</dd></div>
+    <div><dt>Reader mode</dt><dd>A book icon appears in the address bar on articles and shows just the text.</dd></div>
+    <div><dt>System volume</dt><dd>The music button now controls Windows' volume, as well as each tab's.</dd></div>
+    <div><dt>Float a video</dt><dd>Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd> to pop a playing video out in its own small window.</dd></div>
+    <div><dt>Zoom that remembers</dt><dd>Each site keeps its own level. Press <kbd>Ctrl</kbd> and plus or minus.</dd></div>
+    <div><dt>Blocked count</dt><dd>The shield shows what it stopped on this page and this month, counted only on your PC.</dd></div>
+    <div><dt>Extensions</dt><dd>Add an extension from an unpacked folder, using the puzzle icon.</dd></div>
+    <div><dt>Clear errors</dt><dd>Plain words for no internet, slow connections and sites that are down, with one click to try again.</dd></div>
+  </dl>
+
+  <div class="done"><button class="primary" data-do="close">Start browsing</button></div>
+</main>
+<script>
+const root = document.documentElement, theme = root.dataset.theme;
+root.classList.toggle('dark', theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+for (const b of document.querySelectorAll('[data-do]')) b.onclick = () => window.ipc.postMessage('welcome:' + b.dataset.do);
+function imported(text) { document.getElementById('note').textContent = text; }
+</script>
+</html>

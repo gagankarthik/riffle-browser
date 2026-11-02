@@ -54,12 +54,23 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 - **Task manager.** Lists tabs and background processes with the memory each one holds, under the Developer menu or in the side list of Bookmarks and History.
 - **About Riffle.** In Settings, with your version, the engine version and Check for updates.
 - **Bookmarks.** The star opens a dialog to edit the name and link, or remove the bookmark.
-- **Zoom.** Ctrl+plus, Ctrl+minus and Ctrl+0, or the zoom control in the three dots menu. Each tab keeps its own level.
+- **Tabs you can arrange.** Drag to reorder, or drag a tab away from the tab strip to give it its own window. Right-click a tab to pin it, or to move it to a new window, the start or the end. Pinned tabs stay awake and come back next time. Ctrl+Shift+A searches open tabs.
+- **Import.** Bring bookmarks from Chrome or Edge. Passwords are never copied.
+- **Simple setup.** A short step-by-step installer, with a folder you can change and no administrator rights needed.
+- **Tidy bookmarks bar.** Drag bookmarks to arrange them. Anything that does not fit sits behind a double arrow.
+- **Reader mode.** A book icon appears on pages that look like articles and shows just the text.
+- **Customisable toolbar.** Settings, Toolbar sets each icon beside the address bar to always show, show when needed, or hide. Hidden ones stay in the menu.
+- **Picture-in-picture.** Ctrl+Shift+P, the menu or the music dialog floats a playing video.
+- **Extensions.** Add an unpacked extension from its folder. The Chrome Web Store cannot install into Riffle, and extension toolbar buttons and pop-ups do not appear.
+- **Blocked count.** The shield shows what was stopped on this page and this month, counted only on your PC.
+- **Welcome tab.** Opens once for each version with news, listing what is new, with bookmark import and default browser set-up.
+- **Clear errors.** Plain pages for no internet, a site that cannot be found, timeouts, invalid security certificates and crashes, plus a note when a page is slow to load. Back online, a page that failed for lack of internet reloads by itself.
+- **Zoom.** Ctrl+plus, Ctrl+minus and Ctrl+0, or the zoom control in the three dots menu. Each site keeps its own level, remembered next time.
 - **Video fullscreen.** A site's fullscreen button fills the whole screen with the toolbar hidden. Esc or any browser shortcut comes back.
-- **Music controls.** The music button beside the address bar lists what is playing, with play/pause and volume for each tab.
+- **Music controls.** The music button beside the address bar controls the Windows system volume, and lists what is playing, with play/pause and volume for each tab.
 - **Own menus and dialogs.** The three dots menu, music dialog, confirm dialogs and Settings controls follow the theme, and work with the keyboard.
 - **History.** Searchable, with an X to remove any single entry or a button to clear it all.
-- **Downloads.** The toolbar icon lights up while files download, and a small note under the toolbar reports each one as it starts and when it ends. Ctrl+J or the toolbar button lists finished and failed downloads, and shows a file in its folder. Settings chooses the folder, or asks each time. Private windows stay off the list.
+- **Downloads.** The toolbar icon lights up while files download, and a small note under the toolbar reports each one as it starts and when it ends. Ctrl+J, the three dots menu, or the toolbar icon that appears around a download lists finished and failed downloads, and shows a file in its folder. Settings chooses the folder, or asks each time. Private windows stay off the list.
 - **Per-site exceptions.** The shield can allow pop-ups and redirects, or turn blocking off, for one site. Settings lists every exception.
 - **New tab page.** A plain page with the search bar in the centre, or your own page from Settings.
 - **Bookmarks and history.** Stored as plain files in `%LOCALAPPDATA%\Riffle`, searchable from the menu.
@@ -88,7 +99,19 @@ Riffle has not been formally benchmarked yet, so this lists how it saves resourc
 riffle-browser.exe --agent
 ```
 
-This opens the Chrome DevTools Protocol on `127.0.0.1:9222`, which agent tools can connect to:
+This opens the Chrome DevTools Protocol on `127.0.0.1:9222`. Agents see only your tabs, not Riffle's toolbar or dialogs. You can also turn this on in Settings, About Riffle.
+
+For the fewest tokens, use [agent-browser](https://github.com/vercel-labs/agent-browser). Its snapshots list only what can be clicked or typed in, with short references:
+
+```
+npm install -g agent-browser
+agent-browser connect 9222
+agent-browser open https://example.com
+agent-browser snapshot -i
+agent-browser click @e1
+```
+
+Other tools connect the same way:
 
 ```
 npx chrome-devtools-mcp --browserUrl http://127.0.0.1:9222
@@ -138,4 +161,4 @@ Yes. Start it with `--agent` and connect a tool such as Playwright. See [For AI 
 
 ## License
 
-[MIT](LICENSE). The website's fonts are under the SIL Open Font License: see `website/fonts`. Its river photograph is ["Raft in a Class II- Riffle"](https://commons.wikimedia.org/wiki/File:Raft_in_a_Class_II-_Riffle.jpg) by Ryanx7, CC BY-SA 3.0, resized.
+[MIT](LICENSE). The website's fonts are under the SIL Open Font License: see `website/fonts`.

@@ -14,7 +14,8 @@ button { padding: 0; border: 0; background: none; color: inherit; font: inherit;
 :focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
 
 .item { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
-.item + .item { border-top: 1px solid var(--line); }
+.item + .item, #system + #items { border-top: 1px solid var(--line); }
+[hidden] { display: none !important; }
 .title { display: block; width: 100%; min-width: 0; text-align: left; border-radius: 4px; }
 .title:hover .name { text-decoration: underline; }
 .name, .site { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -32,12 +33,20 @@ input[type=range] { flex: 1; min-width: 0; height: 24px; margin: 0; background: 
 input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--ink) var(--level, 100%), var(--track) var(--level, 100%)); }
 input[type=range]::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--ink); }
 
-.empty { display: flex; align-items: center; gap: 12px; height: 100%; padding: 0 16px; }
+.empty { display: flex; align-items: center; gap: 12px; height: 72px; padding: 0 16px; }
 .empty svg { flex: none; color: var(--muted); }
 .empty .site { white-space: normal; }
 @media (prefers-reduced-motion: no-preference) { body { animation: appear .12s ease-out; } @keyframes appear { from { opacity: 0; transform: translateY(-4px); } } }
 </style>
 <!--ICONS-->
+<div class="item" id="system" hidden>
+  <span class="name">System volume</span>
+  <div class="row">
+    <button class="mute" id="system-mute"></button>
+    <input id="system-level" type="range" min="0" max="100" aria-label="System volume">
+    <span class="percent" id="system-percent"></span>
+  </div>
+</div>
 <div id="items"></div>
 <script>
 const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
@@ -64,11 +73,14 @@ function showLevel(parts, volume) {
 function item(t) {
   const div = document.createElement('div');
   div.className = 'item';
-  div.innerHTML = '<button class="title" title="Go to this tab"><span class="name"></span><span class="site"></span></button><div class="row"><button class="play"></button><button class="mute"></button><input type="range" min="0" max="100"><span class="percent"></span></div>';
+  div.innerHTML = '<button class="title" title="Go to this tab"><span class="name"></span><span class="site"></span></button><div class="row"><button class="play"></button><button class="mute"></button><input type="range" min="0" max="100"><span class="percent"></span><button class="mute pip" title="Float this video" aria-label="Float this video"></button></div>';
   const parts = {name: div.querySelector('.name'), site: div.querySelector('.site'), play: div.querySelector('.play'), mute: div.querySelector('.mute'), slider: div.querySelector('input'), percent: div.querySelector('.percent')};
   div.parts = parts;
   div.querySelector('.title').onclick = () => send('select', {id: t.id});
   parts.play.onclick = () => send('media_toggle', {id: t.id});
+  const pip = div.querySelector('.pip');
+  pip.append(icon('pip'));
+  pip.onclick = () => send('media_pip', {id: t.id});
   parts.slider.oninput = () => {
     const volume = parts.slider.value / 100;
     showLevel(parts, volume);
@@ -86,13 +98,15 @@ function render(state) {
   for (const t of state.items) {
     if (!nodes.has(t.id)) nodes.set(t.id, items.appendChild(item(t)));
     const {parts} = nodes.get(t.id);
+    nodes.get(t.id).querySelector('.pip').hidden = !t.video;
     parts.name.textContent = t.title; // textContent: page titles must never become markup here
     parts.site.textContent = t.site;
     parts.play.replaceChildren(icon(t.playing ? 'pause' : 'play'));
     parts.play.title = t.playing ? 'Pause' : 'Play';
     parts.play.setAttribute('aria-label', (t.playing ? 'Pause ' : 'Play ') + t.title);
     parts.mute.setAttribute('aria-label', 'Mute or unmute ' + t.title);
-    parts.slider.setAttribute('aria-label', 'Volume for ' + t.title);
+    parts.slider.setAttribute('aria-label', 'Tab volume for ' + t.title);
+    parts.slider.title = 'Volume of this tab only';
     if (document.activeElement !== parts.slider) {
       parts.slider.value = Math.round(t.volume * 100);
       showLevel(parts, t.volume);
@@ -113,8 +127,35 @@ function render(state) {
     items.append(icon('music'), note);
   }
   if (state.items.length) items.querySelector(':scope > svg')?.remove();
-  document.getElementById('items').style.height = state.items.length ? '' : '100%';
+  showSystem(state.system);
 }
+const system = {box: document.getElementById('system'), slider: document.getElementById('system-level'), mute: document.getElementById('system-mute'), percent: document.getElementById('system-percent')};
+let muted = false, touched = 0;
+function showSystem(sound) {
+  system.box.hidden = !sound;
+  if (!sound) return;
+  muted = sound.muted;
+  // Not while it is being moved, so a late update cannot pull the slider back under the pointer.
+  if (Date.now() - touched > 800) system.slider.value = Math.round(sound.volume * 100);
+  const percent = Number(system.slider.value);
+  const silent = muted || percent === 0;
+  system.slider.style.setProperty('--level', (muted ? 0 : percent) + '%');
+  system.percent.textContent = muted ? 'Muted' : percent + '%';
+  system.mute.replaceChildren(icon(silent ? 'muted' : 'volume'));
+  system.mute.title = muted ? 'Unmute Windows' : 'Mute Windows';
+  system.mute.setAttribute('aria-label', muted ? 'Unmute system volume' : 'Mute system volume');
+  system.mute.setAttribute('aria-pressed', String(muted));
+}
+system.slider.oninput = () => {
+  touched = Date.now();
+  const percent = Number(system.slider.value);
+  if (percent > 0) muted = false;
+  showSystem({volume: percent / 100, muted});
+  send('system_volume', {value: percent / 100});
+};
+system.mute.onclick = () => send('system_mute', {value: !muted});
+// Follows the volume keys and the taskbar while this dialog is open.
+setInterval(() => send('music_ready'), 1000);
 addEventListener('keydown', e => { if (e.key === 'Escape') send('music_close'); });
 // Clicking anywhere else dismisses it. The delay rides out focus moving between this window and its page.
 addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('music_close'); }, 100));
