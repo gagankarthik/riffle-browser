@@ -138,4 +138,4 @@ Yes. Start it with `--agent` and connect a tool such as Playwright. See [For AI 
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). The website's fonts are under the SIL Open Font License: see `website/fonts`. Its river photograph is ["Raft in a Class II- Riffle"](https://commons.wikimedia.org/wiki/File:Raft_in_a_Class_II-_Riffle.jpg) by Ryanx7, CC BY-SA 3.0, resized.

@@ -6,7 +6,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     // The version in the exe's file details always comes from Cargo.toml. Generated elsewhere, so the icon needs its full path.
     let version = env::var("CARGO_PKG_VERSION").unwrap();
-    let root = env::var("CARGO_MANIFEST_DIR").unwrap().replace('\\', "/");
+    let root = env::var("CARGO_MANIFEST_DIR").unwrap().replace(std::path::MAIN_SEPARATOR, "/");
     let rc = fs::read_to_string("assets/riffle.rc")
         .unwrap()
         .replace("__ICON__", &format!("{root}/assets/riffle.ico"))
