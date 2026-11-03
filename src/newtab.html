@@ -1,16 +1,19 @@
 <!doctype html>
 <html lang="en" data-theme="__THEME__" data-private="__PRIVATE__">
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https:">
 <title>New tab</title>
 <style>
 :root { --accent: __ACCENT__; --bg: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --ink: #14212b; --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --field: #ffffff; --muted: #46555f; --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 8px 24px rgb(16 40 60 / .14); color-scheme: light; }
 :root.dark { --bg: color-mix(in srgb, var(--accent) 3%, #1a1e21); --ink: #edf1f4; --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --field: color-mix(in srgb, var(--accent) 9%, #262b2f); --muted: #c3ccd2; --tint: oklch(from var(--accent) max(l, .8) c h); --shadow: 0 1px 2px rgb(0 0 0 / .40), 0 8px 24px rgb(0 0 0 / .40); color-scheme: dark; }
 :root[data-private=true] { --bg: #242424; --ink: #f1f1f1; --line: #8e918f; --field: #141414; --muted: #d5d8d6; color-scheme: dark; }
+:root { --bg: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --field: #fff; }
+:root.dark { --bg: #202124; --ink: #e8eaed; --muted: #bdc1c6; --line: #5f6368; --field: #292a2d; }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px "Segoe UI", sans-serif; }
 body { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 12vh 24px 24px; overflow-y: auto; }
-#name { margin: 0; font: 72px/1 Gabriola, Georgia, serif; color: var(--tint); user-select: none; }
+#name { display: flex; align-items: center; gap: 12px; margin: 0; font: 600 40px/1 "Segoe UI", sans-serif; color: var(--ink); user-select: none; }
+#name svg { width: 48px; height: 48px; }
 form { width: min(600px, 100%); }
 input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 21px; background: var(--field); color: inherit; font: 14px "Segoe UI", sans-serif; }
 input::placeholder { color: var(--muted); opacity: 1; }
@@ -21,7 +24,17 @@ p { margin: 0; color: var(--muted); line-height: 20px; }
 #marks button { max-width: 168px; height: 36px; padding: 0 14px; border: 0; border-radius: 18px; background: var(--field); color: inherit; font: inherit; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
 #marks button:hover { outline: 1px solid var(--line); }
 #marks button:focus-visible { outline: 2px solid var(--tint); }
+#blocked { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 16px 0 12px; border-radius: 18px; background: color-mix(in srgb, var(--tint) 12%, var(--field)); color: var(--ink); }
+#blocked svg { flex: none; width: 18px; height: 18px; fill: none; stroke: var(--tint); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#blocked strong { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 #blocked[hidden] { display: none; }
+#settings { position: fixed; top: 12px; right: 16px; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+#settings:hover { background: var(--line); color: var(--ink); }
+#settings:focus-visible { outline: 2px solid var(--tint); }
+#settings svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+#marks button { border: 1px solid var(--line); display: inline-flex; align-items: center; gap: 8px; }
+#marks img { flex: none; width: 16px; height: 16px; }
+#marks span { overflow: hidden; text-overflow: ellipsis; }
 #note { width: min(600px, 100%); }
 #note[hidden] { display: none; }
 h1 { margin: 0 0 8px; font-size: 20px; font-weight: 500; line-height: 28px; }
@@ -30,7 +43,8 @@ h2 { margin: 0 0 8px; font-size: 14px; font-weight: 500; line-height: 20px; }
 .cols > div { flex: 1 1 240px; }
 ul { margin: 0; padding-left: 20px; color: var(--muted); line-height: 24px; }
 </style>
-<h1 id="name">Riffle</h1>
+<button id="settings" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12.200 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.700l-.4.200a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.700.700l-.2.400a2 2 0 0 0 .7 2.700l.2.100a2 2 0 0 1 1 1.700v.5a2 2 0 0 1-1 1.700l-.2.100a2 2 0 0 0-.7 2.700l.2.400a2 2 0 0 0 2.700.7l.2-.1a2 2 0 0 1 2 0l.4.200a2 2 0 0 1 1 1.700v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.700l.4-.2a2 2 0 0 1 2 0l.2.100a2 2 0 0 0 2.700-.7l.2-.4a2 2 0 0 0-.7-2.700l-.2-.1a2 2 0 0 1-1-1.700v-.5a2 2 0 0 1 1-1.700l.2-.1a2 2 0 0 0 .7-2.700l-.2-.4a2 2 0 0 0-2.700-.7l-.2.100a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.700V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+<h1 id="name"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.500-4.800 9 0t9 0M7 16q4.500-4.800 9 0t9 0M7 21q4.500-4.800 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.600" stroke-linecap="round"/></svg>Riffle</h1>
 <form id="go"><input id="q" aria-label="Search or enter address" placeholder="Search or enter address" spellcheck="false" autocomplete="off" autofocus></form>
 <nav id="marks" aria-label="Top bookmarks"></nav>
 <p id="blocked" hidden></p>
@@ -50,14 +64,30 @@ document.getElementById('note').hidden = root.dataset.private !== 'true';
 const marks = __MARKS__;
 document.getElementById('marks').replaceChildren(...marks.map(m => {
   const b = document.createElement('button');
-  b.textContent = m.title || m.url; // textContent: titles come from web pages
+  const label = document.createElement('span');
+  label.textContent = m.title || m.url; // textContent: titles come from web pages
+  try {
+    const img = new Image();
+    img.alt = '';
+    img.width = img.height = 16;
+    const fallback = new URL(m.url).origin + '/favicon.ico';
+    img.onerror = () => { if (img.getAttribute('src') === fallback) img.remove(); else img.src = fallback; };
+    img.src = m.icon || fallback;
+    if (root.dataset.private !== 'true') b.append(img);
+  } catch {}
+  b.append(label);
   b.title = m.url;
   b.onclick = () => window.ipc.postMessage('go:' + m.url);
   return b;
 }));
 const count = Number('__BLOCKED__');
 const said = document.getElementById('blocked');
-if (count) { said.textContent = count.toLocaleString() + ' ads and trackers blocked this month'; said.hidden = false; }
+if (count) {
+  said.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.500 3 8 7 10 4-2 7-5.500 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span><strong></strong> ads and trackers blocked this month</span>';
+  said.querySelector('strong').textContent = count.toLocaleString();
+  said.hidden = false;
+}
+document.getElementById('settings').onclick = () => window.ipc.postMessage('open_settings');
 document.getElementById('go').onsubmit = e => {
   e.preventDefault();
   window.ipc.postMessage('go:' + document.getElementById('q').value);

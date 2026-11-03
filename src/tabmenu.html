@@ -6,6 +6,8 @@
 <style>
 :root { --bar: #fff; --ink: #14212b; --hover: #d7e6ec; color-scheme: light; }
 :root.dark { --bar: #262b2f; --ink: #edf1f4; --hover: #3a4a52; color-scheme: dark; }
+:root { --strip: #f1f3f4; --page: #fff; --bar: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --edge: #80868b; --hover: #e8f0f4; --field: #f1f3f4; }
+:root.dark { --strip: #202124; --page: #202124; --bar: #292a2d; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; --edge: #9aa0a6; --hover: #3c4043; --field: #202124; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
 body { padding: 8px 0; }
@@ -18,7 +20,7 @@ button:disabled { opacity: .55; }
 const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
 function render(state) {
   document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
-  document.getElementById('items').replaceChildren(...[[state.pinned ? 'Unpin tab' : 'Pin tab', 'pin'], ['Move to new window', 'window', state.alone], ['Move to start', 'start', state.alone], ['Move to end', 'end', state.alone], ['Close tab', 'close'], ['Close other tabs', 'others', state.alone]].map(([label, value, off]) => {
+  document.getElementById('items').replaceChildren(...[[state.pinned ? 'Unpin tab' : 'Pin tab', 'pin'], state.group ? ['Remove from group', 'group_leave'] : ['Add to new group', 'group_new', state.pinned], ...state.groups.filter(g => g.id !== state.group).slice(0, 4).map(g => ['Add to ' + (g.name || 'unnamed group'), 'group:' + g.id, state.pinned]), ['Move to new window', 'window', state.alone], ['Move to start', 'start', state.alone], ['Move to end', 'end', state.alone], ['Close tab', 'close'], ['Close other tabs', 'others', state.alone], [state.vertical ? 'Show tabs on top' : 'Show tabs on the side', 'side']].map(([label, value, off]) => {
     const b = document.createElement('button');
     b.setAttribute('role', 'menuitem');
     b.textContent = label;

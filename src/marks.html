@@ -6,6 +6,8 @@
 <style>
 :root { --bar: #fff; --ink: #14212b; --muted: #46555f; --hover: #d7e6ec; color-scheme: light; }
 :root.dark { --bar: #262b2f; --ink: #edf1f4; --muted: #c3ccd2; --hover: #3a4a52; color-scheme: dark; }
+:root { --strip: #f1f3f4; --page: #fff; --bar: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --edge: #80868b; --hover: #e8f0f4; --field: #f1f3f4; }
+:root.dark { --strip: #202124; --page: #202124; --bar: #292a2d; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; --edge: #9aa0a6; --hover: #3c4043; --field: #202124; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
 body { padding: 8px 0; overflow-y: auto; }
@@ -21,17 +23,30 @@ const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extr
 const GLOBE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>';
 function render(state) {
   document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  if (state.actions) {
+    document.getElementById('items').replaceChildren(...[['Open', 'open'], ['Open in new tab', 'tab'], ['Open in new window', 'window'], ['Edit in Bookmarks', 'edit'], ['Delete', 'delete'], ['Hide bookmarks bar', 'hide']].map(([label, value]) => {
+      const b = document.createElement('button');
+      b.setAttribute('role', 'menuitem');
+      b.textContent = label;
+      b.onclick = () => send('mark_action', {value});
+      return b;
+    }));
+    document.querySelector('button').focus();
+    return;
+  }
   document.getElementById('items').replaceChildren(...state.marks.map(m => {
     const b = document.createElement('button');
     b.setAttribute('role', 'menuitem');
     b.title = m.title + '\n' + m.url;
     b.innerHTML = GLOBE;
-    if (m.icon) {
+    try {
       const img = new Image();
       img.alt = '';
+      const fallback = new URL(m.url).origin + '/favicon.ico';
       img.onload = () => b.firstChild.replaceWith(img);
-      img.src = m.icon;
-    }
+      img.onerror = () => { if (img.getAttribute('src') !== fallback) img.src = fallback; };
+      img.src = m.icon || fallback;
+    } catch {}
     const label = document.createElement('span');
     label.textContent = m.title || m.url;
     b.append(label);

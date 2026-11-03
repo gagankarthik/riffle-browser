@@ -6,6 +6,8 @@
 <style>
 :root { --accent: __ACCENT__; --bg: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --card: #fff; --ink: #14212b; --muted: #46555f; --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --hover: color-mix(in srgb, var(--accent) 18%, transparent); --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); color-scheme: light; }
 :root.dark { --bg: color-mix(in srgb, var(--accent) 3%, #1a1e21); --card: color-mix(in srgb, var(--accent) 9%, #262b2f); --ink: #edf1f4; --muted: #c3ccd2; --line: color-mix(in srgb, var(--accent) 20%, #3f464b); --edge: color-mix(in srgb, var(--accent) 20%, #8b949a); --hover: color-mix(in srgb, var(--accent) 34%, transparent); --tint: oklch(from var(--accent) max(l, .8) c h); color-scheme: dark; }
+:root { --bg: #fff; --card: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; }
+:root.dark { --bg: #202124; --card: #292a2d; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Segoe UI", sans-serif; }
 main { max-width: 860px; margin: 0 auto; padding: 56px 24px 72px; }
@@ -53,17 +55,12 @@ kbd { padding: 0 4px; border: 1px solid var(--edge); border-radius: 4px; font: 1
 
   <h2>New in this version</h2>
   <dl>
+    <div><dt>Tabs on the side</dt><dd>Right-click a tab and choose Show tabs on the side, for a list that fits long titles.</dd></div>
+    <div><dt>Tab groups</dt><dd>Right-click a tab and add it to a group. Name it, pick a colour, and click the name to collapse it.</dd></div>
     <div><dt>Arrange your tabs</dt><dd>Drag to reorder, or drag a tab away from the strip to give it its own window. Right-click a tab for more.</dd></div>
-    <div><dt>Your toolbar, your way</dt><dd>Choose which icons show beside the address bar in Settings, Toolbar.</dd></div>
-    <div><dt>Pinned tabs</dt><dd>They stay small, stay awake and come back next time.</dd></div>
     <div><dt>Search tabs</dt><dd>Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>A</kbd> to find any open tab, even a sleeping one.</dd></div>
     <div><dt>Reader mode</dt><dd>A book icon appears in the address bar on articles and shows just the text.</dd></div>
-    <div><dt>System volume</dt><dd>The music button now controls Windows' volume, as well as each tab's.</dd></div>
     <div><dt>Float a video</dt><dd>Press <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>P</kbd> to pop a playing video out in its own small window.</dd></div>
-    <div><dt>Zoom that remembers</dt><dd>Each site keeps its own level. Press <kbd>Ctrl</kbd> and plus or minus.</dd></div>
-    <div><dt>Blocked count</dt><dd>The shield shows what it stopped on this page and this month, counted only on your PC.</dd></div>
-    <div><dt>Extensions</dt><dd>Add an extension from an unpacked folder, using the puzzle icon.</dd></div>
-    <div><dt>Clear errors</dt><dd>Plain words for no internet, slow connections and sites that are down, with one click to try again.</dd></div>
   </dl>
 
   <div class="done"><button class="primary" data-do="close">Start browsing</button></div>

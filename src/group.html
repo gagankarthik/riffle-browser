@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Riffle tab group</title>
+<style>
+:root { --bar: #fff; --ink: #14212b; --muted: #46555f; --hover: #d7e6ec; --edge: #6d8791; --field: #eef3f5; color-scheme: light; }
+:root.dark { --bar: #262b2f; --ink: #edf1f4; --muted: #c3ccd2; --hover: #3a4a52; --edge: #8b949a; --field: #1a1e21; color-scheme: dark; }
+:root { --strip: #f1f3f4; --page: #fff; --bar: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --edge: #80868b; --hover: #e8f0f4; --field: #f1f3f4; }
+:root.dark { --strip: #202124; --page: #202124; --bar: #292a2d; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; --edge: #9aa0a6; --hover: #3c4043; --field: #202124; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bar); color: var(--ink); font: 13px "Segoe UI", sans-serif; user-select: none; }
+body { display: grid; gap: 12px; align-content: start; padding: 12px; }
+input { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--edge); border-radius: 8px; background: var(--field); color: inherit; font: inherit; user-select: text; }
+#colours { display: flex; justify-content: space-between; }
+#colours button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; }
+#colours button[aria-pressed=true] { outline: 2px solid var(--ink); outline-offset: 2px; }
+.actions { display: flex; gap: 8px; }
+.actions button { flex: 1; height: 32px; padding: 0 8px; border: 1px solid var(--edge); border-radius: 8px; background: none; color: inherit; font: inherit; }
+.actions button:hover { background: var(--hover); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+input:focus-visible { outline-offset: -2px; }
+</style>
+<input id="name" aria-label="Group name" placeholder="Name this group" maxlength="40" spellcheck="false">
+<div id="colours" role="group" aria-label="Group colour"></div>
+<div class="actions"><button id="ungroup">Ungroup</button><button id="close">Close group</button></div>
+<script>
+const $ = id => document.getElementById(id);
+const send = (cmd, extra) => window.ipc.postMessage(JSON.stringify({cmd, ...extra}));
+let colour = '';
+const save = () => send('group_save', {name: $('name').value, color: colour});
+function render(state) {
+  document.documentElement.classList.toggle('dark', state.theme === 'dark' || state.private || (state.theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches));
+  colour = state.color;
+  $('name').value = state.name;
+  $('colours').replaceChildren(...state.colors.map(([value, label]) => {
+    const b = document.createElement('button');
+    b.style.background = value;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.setAttribute('aria-pressed', value === colour);
+    b.onclick = () => {
+      colour = value;
+      for (const other of $('colours').children) other.setAttribute('aria-pressed', other === b);
+      save();
+    };
+    return b;
+  }));
+  $('name').focus();
+  $('name').select();
+}
+$('name').oninput = save;
+$('name').onkeydown = e => { if (e.key === 'Enter') send('group_dialog_close'); };
+$('ungroup').onclick = () => send('group_ungroup');
+$('close').onclick = () => send('group_close');
+addEventListener('keydown', e => { if (e.key === 'Escape') send('group_dialog_close'); });
+addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) send('group_dialog_close'); }, 100));
+send('group_ready');
+</script>
+</html>

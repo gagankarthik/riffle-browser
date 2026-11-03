@@ -15,10 +15,39 @@ button { color: inherit; font: inherit; background: none; border: 0; padding: 0;
 #grip { position: absolute; top: 0; left: 0; right: 0; height: 4px; cursor: n-resize; z-index: 1; }
 body.maximized #grip { display: none; }
 
+:root { --strip: #dee1e6; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --field: #f1f3f4; --hover: rgb(60 64 67 / .1); }
+:root.dark { --strip: #202124; --bar: #292a2d; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; --field: #202124; --hover: rgb(232 234 237 / .12); }
+#nav button svg.i, #new svg.i { stroke-width: 1.75; color: #474747; }
+:root.dark #nav button svg.i, :root.dark #new svg.i, body.private #nav button svg.i, body.private #new svg.i { color: #e8eaed; }
+#nav button:disabled svg.i { color: var(--off); }
+#address { border-color: transparent !important; }
+#drag { display: flex; align-items: center; min-width: 0; padding: 0 12px; overflow: hidden; color: var(--muted); font-size: 12px; white-space: nowrap; }
 #strip { display: flex; align-items: stretch; height: 36px; }
 #tabs { display: flex; gap: 2px; flex: 0 1 calc(var(--n, 1) * 222px); min-width: 0; margin: 4px 0 0 8px; overflow-x: auto; scrollbar-width: none; }
 .tab { display: flex; align-items: center; flex: 1 1 0; min-width: 44px; max-width: 220px; border-radius: 8px 8px 0 0; container-type: inline-size; }
 .tab:hover { background: var(--hover); }
+.tab.collapsed { display: none; }
+.group { position: relative; flex: none; align-self: center; max-width: 140px; height: 24px; margin: 4px 2px 0 0; padding: 0 8px 0 20px; border-radius: 6px; color: var(--ink); font-size: 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.group::before { content: ""; position: absolute; left: 7px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--group); }
+.group:hover { background: var(--hover); }
+.tab.grouped { position: relative; }
+.tab.grouped::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--group); pointer-events: none; }
+body.vertical #tabs, body.vertical #new { display: none; }
+/* The side tab list: this same page, showing only its tabs. */
+:root.side #grip, :root.side #nav, :root.side #bar, :root.side #controls, :root.side #drag, :root.side #loadbar { display: none !important; }
+:root.side body { height: 100vh; margin: 0; overflow: hidden; box-shadow: inset -1px 0 0 var(--line); }
+:root.side #strip { flex-direction: column; height: 100%; padding: 8px; gap: 4px; }
+:root.side #tabs { flex: 0 1 auto; flex-direction: column; margin: 0; overflow: hidden auto; }
+:root.side .tab { flex: none; width: 100%; max-width: none; height: 36px; border-radius: 8px; }
+:root.side .tab.grouped { width: calc(100% - 14px); margin-left: 14px; }
+:root.side .tab.grouped::after { left: -9px; right: auto; top: 0; bottom: 0; width: 2px; height: auto; }
+:root.side .group { align-self: stretch; max-width: 100%; height: 28px; margin: 4px 0 0; text-align: left; font-size: 13px; }
+:root.side .group::before { top: 10px; }
+:root.side #new { align-self: stretch; display: flex; align-items: center; justify-content: flex-start; gap: 8px; width: auto; height: 36px; margin: 0; padding: 0 8px; border-radius: 8px; }
+:root.side #new::after { content: "New tab"; overflow: hidden; white-space: nowrap; }
+@media (max-width: 100px) { :root.side #strip { padding: 4px; } :root.side #new::after { display: none; } :root.side .group { font-size: 0; padding: 0; height: 20px; }
+:root.side .tab.grouped { width: 100%; margin-left: 0; }
+:root.side .tab.grouped::after { left: 0; } }
 @media (prefers-reduced-motion: no-preference) {
   #nav button svg.i, #new svg.i { transition: transform .12s ease-out; }
   #nav button:active svg.i, #new:active svg.i { transform: scale(.9); }
@@ -195,9 +224,18 @@ function makeIcon(url, glyph, declared) {
   return ico;
 }
 
-const tabNodes = new Map();
+const side = document.documentElement.classList.contains('side');
+const tabNodes = new Map(), groupNodes = new Map();
+function makeGroup(id) {
+  const head = document.createElement('button');
+  head.className = 'group';
+  head.onclick = () => send('group_toggle', {group: id});
+  head.oncontextmenu = e => { e.preventDefault(); const r = head.getBoundingClientRect(); send('group_menu', side ? {group: id, x: r.left + 8, y: r.bottom} : {group: id, x: r.left}); };
+  return head;
+}
 let shownActive = null, shownMarks = null, theme = 'system', loading = false, dragging = false, suppressClick = false;
 
+const outside = e => side ? e.clientX > innerWidth + 16 || e.clientX < -16 : e.clientY > innerHeight + 16 || e.clientY < -16;
 function makeTab(id) {
   const tab = document.createElement('div');
   const name = document.createElement('button');
@@ -218,7 +256,7 @@ function makeTab(id) {
   x.append(icon('close'));
   x.onclick = () => send('close', {id});
   tab.onauxclick = e => { if (e.button === 1) send('close', {id}); };
-  tab.oncontextmenu = e => { e.preventDefault(); send('tab_menu', {id, x: tab.getBoundingClientRect().left}); };
+  tab.oncontextmenu = e => { e.preventDefault(); const r = tab.getBoundingClientRect(); send('tab_menu', side ? {id, x: r.left + 8, y: r.bottom} : {id, x: r.left}); };
   // Dragging with the pointer, since this web view does not take part in native drag and drop.
   name.onpointerdown = down => {
     if (down.button !== 0) return;
@@ -229,21 +267,21 @@ function makeTab(id) {
       if (!moving) {
         moving = dragging = true;
         // Tabs shift by transform only: moving the tab in the page would end the pointer capture and the drag with it.
-        peers = [...$('tabs').children].filter(n => n.classList.contains('pinned') === tab.classList.contains('pinned'));
-        centres = peers.map(n => { const r = n.getBoundingClientRect(); return r.left + r.width / 2; });
+        peers = [...$('tabs').querySelectorAll('.tab:not(.collapsed)')].filter(n => n.classList.contains('pinned') === tab.classList.contains('pinned'));
+        centres = peers.map(n => { const r = n.getBoundingClientRect(); return side ? r.top + r.height / 2 : r.left + r.width / 2; });
         from = to = peers.indexOf(tab);
         centre = centres[from];
-        gap = tab.getBoundingClientRect().width + 2;
+        gap = (side ? tab.getBoundingClientRect().height : tab.getBoundingClientRect().width) + 2;
         tab.classList.add('dragging');
         $('tabs').classList.add('sorting');
       }
-      const dx = e.clientX - down.clientX, at = centre + dx;
-      tab.style.transform = `translateX(${dx}px)`;
-      tab.classList.toggle('leaving', e.clientY > innerHeight + 16 || e.clientY < -16);
+      const dx = side ? e.clientY - down.clientY : e.clientX - down.clientX, at = centre + dx, shift = side ? 'translateY' : 'translateX';
+      tab.style.transform = `${shift}(${dx}px)`;
+      tab.classList.toggle('leaving', outside(e));
       to = from;
       for (let i = from + 1; i < centres.length; i++) if (at > centres[i]) to = i;
       for (let i = from - 1; i >= 0; i--) if (at < centres[i]) to = i;
-      peers.forEach((n, i) => { if (n !== tab) n.style.transform = i > from && i <= to ? `translateX(${-gap}px)` : i < from && i >= to ? `translateX(${gap}px)` : ''; });
+      peers.forEach((n, i) => { if (n !== tab) n.style.transform = i > from && i <= to ? `${shift}(${-gap}px)` : i < from && i >= to ? `${shift}(${gap}px)` : ''; });
     };
     name.onpointerup = name.onpointercancel = e => {
       name.onpointermove = name.onpointerup = name.onpointercancel = null;
@@ -256,8 +294,8 @@ function makeTab(id) {
       setTimeout(() => { suppressClick = false; }, 0);
       if (e.type !== 'pointerup') return;
       // Let go away from the toolbar and the tab gets its own window.
-      const out = e.clientY > innerHeight + 16 || e.clientY < -16;
-      send(out ? 'tab_detach' : 'tab_move', {id, value: [...$('tabs').children].indexOf(peers[to])});
+      const out = outside(e);
+      send(out ? 'tab_detach' : 'tab_move', {id, value: [...$('tabs').querySelectorAll('.tab')].indexOf(peers[to])});
     };
   };
   tab.append(name, x);
@@ -269,18 +307,23 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)');
 function glide(before) {
   if (calm.matches || dragging) return;
   for (const [id, tab] of tabNodes) {
-    const was = before.get(id), now = tab.getBoundingClientRect().left;
+    const was = before.get(id), now = side ? tab.getBoundingClientRect().top : tab.getBoundingClientRect().left;
     if (was === undefined) tab.animate([{opacity: 0, transform: 'translateY(6px)'}, {opacity: 1, transform: 'none'}], {duration: 160, easing: 'ease-out'});
-    else if (Math.abs(was - now) > 1) tab.animate([{transform: `translateX(${was - now}px)`}, {transform: 'none'}], {duration: 180, easing: 'cubic-bezier(.2, .7, .2, 1)'});
+    else if (Math.abs(was - now) > 1) tab.animate([{transform: `${side ? 'translateY' : 'translateX'}(${was - now}px)`}, {transform: 'none'}], {duration: 180, easing: 'cubic-bezier(.2, .7, .2, 1)'});
   }
 }
 
+let reported = false;
 function render(state) {
   const tabs = $('tabs');
-  const before = new Map([...tabNodes].map(([id, tab]) => [id, tab.getBoundingClientRect().left]));
+  const before = new Map([...tabNodes].map(([id, tab]) => [id, side ? tab.getBoundingClientRect().top : tab.getBoundingClientRect().left]));
   // Pinned tabs are narrow, so the strip only claims what its tabs use and the plus sits right after the last one.
   const pinnedTabs = state.tabs.filter(t => t.pinned).length;
-  tabs.style.flexBasis = (pinnedTabs * 46 + (state.tabs.length - pinnedTabs) * 222) + 'px';
+  if (!side) tabs.style.flexBasis = (pinnedTabs * 46 + state.groups.length * 120 + (state.tabs.length - pinnedTabs) * 222) + 'px';
+  document.body.classList.toggle('vertical', state.vertical && !side);
+  $('drag').textContent = state.vertical && !side ? (state.tabs.find(t => t.active)?.title || '') : '';
+  const groupById = new Map(state.groups.map(g => [g.id, g]));
+  for (const [id, node] of groupNodes) if (!groupById.has(id)) { node.remove(); groupNodes.delete(id); }
   const live = new Set(state.tabs.map(t => t.id));
   for (const [id, node] of tabNodes) if (!live.has(id)) { node.remove(); tabNodes.delete(id); }
   for (const t of state.tabs) {
@@ -301,10 +344,34 @@ function render(state) {
     name.title = t.private ? t.title + ' (private)' : t.asleep ? t.title + ' (asleep to save memory, reloads when selected)' : t.title;
     x.setAttribute('aria-label', 'Close ' + t.title);
     x.title = 'Close tab (Ctrl+W)';
+    const inGroup = groupById.get(t.group);
+    tab.classList.toggle('grouped', !!inGroup);
+    tab.classList.toggle('collapsed', !!inGroup && inGroup.collapsed);
+    if (inGroup) tab.style.setProperty('--group', inGroup.color);
     if (t.active && shownActive !== t.id) { shownActive = t.id; tab.scrollIntoView({inline: 'nearest', block: 'nearest'}); }
   }
-  if (!dragging) state.tabs.forEach((t, i) => { const node = tabNodes.get(t.id); if (tabs.children[i] !== node) tabs.insertBefore(node, tabs.children[i] || null); });
+  if (!dragging) {
+    // A group's heading goes just before its first tab.
+    const order = [], placed = new Set();
+    for (const t of state.tabs) {
+      const g = groupById.get(t.group);
+      if (g && !placed.has(g.id)) {
+        placed.add(g.id);
+        let head = groupNodes.get(g.id);
+        if (!head) { head = makeGroup(g.id); groupNodes.set(g.id, head); }
+        head.textContent = g.name || (g.collapsed ? '' : 'Group');
+        if (g.collapsed) head.textContent += (g.name ? ' ' : '') + g.count;
+        head.style.setProperty('--group', g.color);
+        head.title = `${g.name || 'Unnamed group'}, ${g.count} ${g.count === 1 ? 'tab' : 'tabs'}. Click to ${g.collapsed ? 'open' : 'collapse'}, right-click to edit`;
+        head.setAttribute('aria-expanded', !g.collapsed);
+        order.push(head);
+      }
+      order.push(tabNodes.get(t.id));
+    }
+    order.forEach((node, i) => { if (tabs.children[i] !== node) tabs.insertBefore(node, tabs.children[i] || null); });
+  }
   glide(before);
+  if (!reported) { reported = true; setTimeout(() => send('painted'), 16); } // the window appears now, already drawn
   if (document.activeElement !== address) address.value = state.url;
   document.body.classList.toggle('maximized', state.maximized);
   document.body.classList.toggle('private', state.private);
@@ -381,6 +448,7 @@ function render(state) {
       mark.append(makeIcon(b.url, 'globe', b.icon), label);
       mark.onclick = () => { if (!suppressClick) send('go', {value: b.url}); };
       dragMark(mark);
+      mark.oncontextmenu = e => { e.preventDefault(); send('mark_menu', {url: b.url, x: mark.getBoundingClientRect().left}); };
       return mark;
     }));
     fitMarks();

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: https:">
 <title>Riffle</title>
 <style>
 :root { --accent: #0b6e8f; --strip: color-mix(in srgb, var(--accent) 9%, #eef1f4); --page: color-mix(in srgb, var(--accent) 3%, #f6f8fa); --bar: #ffffff; --ink: #14212b; --hover: color-mix(in srgb, var(--accent) 18%, transparent); --line: color-mix(in srgb, var(--accent) 18%, #d5dade); --edge: color-mix(in srgb, var(--accent) 30%, #6d7478); --field: color-mix(in srgb, var(--accent) 6%, #f5f7f9); --muted: #46555f; --off: #6b7780; --track: #8a959c; --fill: oklch(from var(--accent) min(l, .5) c h); --tint: oklch(from var(--accent) min(l, .45) c h); --shadow: 0 1px 2px rgb(16 40 60 / .10), 0 6px 18px rgb(16 40 60 / .10); color-scheme: light; }
@@ -18,6 +18,7 @@ nav button:hover { background: var(--hover); }
 nav button[aria-current=page], nav button[aria-current=page]:hover { background: var(--hover); color: var(--ink); font-weight: 600; }
 nav button[aria-current=page] svg.i { color: var(--tint); }
 #done { margin-top: auto; }
+.nav-label { flex: none; margin: 16px 0 4px; padding: 0 12px; color: var(--muted); font-size: 12px; line-height: 16px; font-weight: 600; }
 main { flex: 1; min-width: 0; overflow-y: auto; padding: 28px; background: var(--page); }
 main > * { max-width: 720px; margin-inline: auto; }
 h1 { font-size: 26px; font-weight: 600; margin: 0 0 20px; }
@@ -131,6 +132,35 @@ button.plain:disabled { color: var(--off); border-color: var(--line); background
 #about-head { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 #about-head strong { display: block; font-size: 20px; }
 .about-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+:root { --strip: #fff; --page: #fff; --bar: #fff; --ink: #1f1f1f; --muted: #5f6368; --line: #dadce0; --edge: #80868b; --hover: #e8f0f4; --field: #fff; }
+:root.dark { --strip: #202124; --page: #202124; --bar: #202124; --ink: #e8eaed; --muted: #bdc1c6; --line: #3c4043; --edge: #9aa0a6; --hover: #3c4043; --field: #292a2d; }
+nav { box-shadow: inset -1px 0 0 var(--line); }
+nav button[aria-current=page], nav button[aria-current=page]:hover { background: #eceef0; font-weight: 500; }
+:root.dark nav button[aria-current=page], :root.dark nav button[aria-current=page]:hover { background: #3c4043; }
+nav button:hover { background: #f1f3f4; }
+:root.dark nav button:hover { background: #2f3134; }
+nav svg.i, nav button[aria-current=page] svg.i { color: var(--muted); }
+#brand svg { color: inherit; }
+input[type=checkbox] { width: 40px; height: 22px; border: 0; border-radius: 11px; background: var(--edge); }
+input[type=checkbox]::before { top: 3px; left: 3px; width: 16px; height: 16px; background: #fff; }
+input[type=checkbox]:checked { background: var(--fill); }
+input[type=checkbox]:checked::before { transform: translateX(18px); }
+.fav { flex: none; position: relative; width: 16px; height: 16px; color: var(--muted); }
+.fav svg.i { width: 16px; height: 16px; }
+.fav img { position: absolute; inset: 0; width: 16px; height: 16px; }
+.nothing { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 72px 24px; text-align: center; }
+.nothing svg.i { width: 32px; height: 32px; margin-bottom: 12px; color: var(--muted); stroke-width: 1.5; }
+.nothing strong { font-size: 15px; font-weight: 600; }
+.nothing span { color: var(--muted); }
+#task-table { font-size: 13px; }
+#task-table th, #task-table td { height: 40px; padding: 0 16px 0 0; }
+#task-table th { height: 32px; }
+#task-table th, #task-table td { box-sizing: border-box; }
+#task-table th:first-child, #task-table td:first-child { width: 50%; }
+#task-table th:nth-child(2), #task-table td:nth-child(2) { width: 25%; }
+#task-table th:last-child, #task-table td:last-child { width: 25%; padding-right: 0; text-align: right; }
+#task-table .name { font-weight: 400; }
+#task-table .loading { color: var(--muted); text-align: center; height: 120px; }
 /* One page style: flat on the page, 4px spacing steps, one row height for lists, one for settings. */
 main { padding: 32px 40px; background: var(--bar); }
 main > * { max-width: 760px; }
@@ -179,11 +209,11 @@ h1 { margin: 0 0 16px; font-size: 24px; line-height: 32px; }
   <button data-page="downloads">Downloads</button>
   <button data-page="extensions">Extensions</button>
   <button data-page="tasks">Task manager</button>
-  <button data-page="settings">Settings</button>
+  <div class="nav-label">Settings</div>
   <button data-sec="general">General</button>
   <button data-sec="search">Search engine</button>
   <button data-sec="browser">Default browser</button>
-  <button data-sec="files">Downloads</button>
+  <button data-sec="files">Download options</button>
   <button data-sec="toolbar">Toolbar</button>
   <button data-sec="about">About Riffle</button>
   <button id="done">Back to page</button>
@@ -225,7 +255,7 @@ h1 { margin: 0 0 16px; font-size: 24px; line-height: 32px; }
     <table id="task-table">
       <caption class="hidden-label">Riffle's tabs and processes, largest first</caption>
       <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col" class="num">Memory</th></tr></thead>
-      <tbody id="task-rows"></tbody>
+      <tbody id="task-rows"><tr><td colspan="3" class="loading">Measuring memory use</td></tr></tbody>
     </table>
   </section>
   <section id="settings" hidden>
@@ -266,7 +296,9 @@ h1 { margin: 0 0 16px; font-size: 24px; line-height: 32px; }
       <div class="field"><label for="max">Tabs kept awake<span class="sub">Fewer uses less memory. Others reload when selected</span></label><input id="max" type="number" min="1" max="32"></div>
       </div>
       <div id="sec-toolbar" class="sec">
-        <p class="sec-note">Choose what shows beside the address bar. Anything hidden stays in the three dots menu.</p>
+        <div class="field"><label for="tabs_vertical">Show tabs on the side<span class="sub">A list down the left, which fits long titles and many tabs</span></label><input id="tabs_vertical" type="checkbox"></div>
+        <h2>Icons beside the address bar</h2>
+        <p class="sec-note">Anything hidden stays in the three dots menu.</p>
         <div class="field"><label for="tb-star">Bookmark star</label><select id="tb-star" data-icon="star"></select></div>
         <div class="field"><label for="tb-reader">Reader mode<span class="sub">When needed: on pages that look like articles</span></label><select id="tb-reader" data-icon="reader" data-auto></select></div>
         <div class="field"><label for="tb-extensions">Extensions</label><select id="tb-extensions" data-icon="extensions"></select></div>
@@ -283,7 +315,7 @@ h1 { margin: 0 0 16px; font-size: 24px; line-height: 32px; }
     <div id="about-head"><svg viewBox="0 0 32 32" width="56" height="56" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--accent)"/><path d="M7 11q4.5-4.8 9 0t9 0M7 16q4.5-4.8 9 0t9 0M7 21q4.5-4.8 9 0t9 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg><div><strong>Riffle</strong><span class="sub" id="about-version"></span></div></div>
     <div class="field"><label>Updates<span class="sub" id="update-note" role="status"></span></label><button class="plain" id="check-updates">Check for updates</button></div>
     <div class="field"><label for="agent_mode">Allow AI agents to control Riffle<span class="sub">Starts next time you open Riffle. Any program on this PC could then control the browser, including sites you're logged in to</span></label><input id="agent_mode" type="checkbox"></div>
-    <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub">Asks GitHub for a newer version once a day, and sends nothing else</span></label><input id="auto_update" type="checkbox"></div>
+    <div class="field"><label for="auto_update">Update Riffle automatically<span class="sub">Asks GitHub for a newer version each time Riffle opens, and sends nothing else</span></label><input id="auto_update" type="checkbox"></div>
     <div class="field"><label>Browser engine<span class="sub" id="engine-note"></span></label></div>
     <div class="field"><label>Learn more<span class="sub">Free and open source under the MIT license</span></label><div class="about-links"><button class="plain" data-link="website">Website</button><button class="plain" data-link="notes">Release notes</button><button class="plain" data-link="source">Source code</button><button class="plain" data-link="license">License</button></div></div>
     </div>
@@ -324,6 +356,7 @@ darkMedia.onchange = applyTheme;
 function row(entry, removable) {
   const div = document.createElement('div');
   div.className = 'row';
+  div.append(favicon(entry));
   const open = document.createElement('button');
   open.className = 'open';
   const title = document.createElement('span');
@@ -393,10 +426,7 @@ function showDownloads() {
     return div;
   });
   if (!rows.length) {
-    const p = document.createElement('p');
-    p.className = 'empty';
-    p.textContent = needle ? 'Nothing matches.' : 'No downloads yet.';
-    rows.push(p);
+    rows.push(needle ? nothing('download', 'No matches', 'Try different words') : nothing('download', 'No downloads yet', 'Files you download will appear here'));
   }
   $('rows').replaceChildren(...rows);
 }
@@ -425,6 +455,33 @@ function showExceptions() {
   }
   $('sites').replaceChildren(...rows);
   $('sites-row').hidden = !rows.length;
+}
+
+function nothing(glyph, title, text) {
+  const box = document.createElement('div');
+  box.className = 'nothing';
+  const strong = document.createElement('strong');
+  strong.textContent = title;
+  const span = document.createElement('span');
+  span.textContent = text;
+  box.append(icon(glyph), strong, span);
+  return box;
+}
+
+function favicon(entry) {
+  const box = document.createElement('span');
+  box.className = 'fav';
+  box.append(icon('globe'));
+  try {
+    const img = new Image();
+    img.alt = '';
+    const fallback = new URL(entry.url).origin + '/favicon.ico';
+    img.onerror = () => { if (img.getAttribute('src') === fallback) img.remove(); else img.src = fallback; };
+    img.onload = () => box.querySelector('svg')?.remove();
+    img.src = entry.icon || fallback;
+    box.append(img);
+  } catch {}
+  return box;
 }
 
 function dayLabel(seconds) {
@@ -457,7 +514,7 @@ function historyRow(entry) {
   x.title = 'Remove from history';
   x.setAttribute('aria-label', 'Remove from history: ' + (entry.title || entry.url));
   x.onclick = () => send('remove_history', {value: entry.url, time: entry.time});
-  div.append(time, open, x);
+  div.append(time, favicon(entry), open, x);
   return div;
 }
 
@@ -468,10 +525,7 @@ function showHistory() {
   rows.classList.add('by-day');
   $('clear-history').disabled = !state.history.length;
   if (!found.length) {
-    const none = document.createElement('p');
-    none.className = 'empty';
-    none.textContent = needle ? 'No history matches your search' : 'Pages you visit will appear here';
-    rows.replaceChildren(none);
+    rows.replaceChildren(needle ? nothing('clock', 'No matches', 'Try different words') : nothing('clock', 'No history yet', 'Pages you visit will appear here'));
     return;
   }
   const parts = [];
@@ -508,10 +562,7 @@ function showList() {
   const found = all.filter(e => (e.title + ' ' + e.url).toLowerCase().includes(needle));
   const rows = found.slice(0, ROW_LIMIT).map(e => row(e, bookmarks));
   if (!rows.length) {
-    const p = document.createElement('p');
-    p.className = 'empty';
-    p.textContent = needle ? 'Nothing matches.' : bookmarks ? 'No bookmarks yet. Press Ctrl+D on a page, or select Add bookmark.' : 'No history yet.';
-    rows.push(p);
+    rows.push(needle ? nothing('star', 'No matches', 'Try different words') : nothing('star', 'No bookmarks yet', 'Press Ctrl+D on a page, or select Add bookmark'));
   }
   $('rows').replaceChildren(...rows);
 }
@@ -666,6 +717,7 @@ function showSettings(s) {
   $('download-dir').textContent = s.download_dir;
   $('search_suggest').checked = s.search_suggest;
   $('auto_update').checked = s.auto_update;
+  $('tabs_vertical').checked = s.tabs_vertical;
   for (const sel of document.querySelectorAll('[data-icon]')) sel.value = s.toolbar[sel.dataset.icon];
   $('agent_mode').checked = s.agent_mode;
   $('download_ask').checked = s.download_ask;
@@ -694,9 +746,8 @@ function render(next) {
     if (b.dataset.page === next.page) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   const settings = next.page === 'settings';
-  for (const b of document.querySelectorAll('nav [data-page]')) b.hidden = settings;
-  for (const b of document.querySelectorAll('nav [data-sec]')) b.hidden = !settings;
   showSection();
+  if (!settings) for (const b of document.querySelectorAll('nav [data-sec]')) b.removeAttribute('aria-current');
   $('make-default').hidden = next.default_browser;
   $('make-default').textContent = next.installed ? 'Make default' : 'Install Riffle';
   $('default-note').textContent = next.default_browser ? 'Riffle is your default browser' : next.installed ? 'Windows opens its settings page, where you confirm Riffle' : 'Windows can only offer Riffle as a browser once it is installed';
@@ -705,7 +756,7 @@ function render(next) {
   $('engine-note').textContent = next.engine_version ? `Microsoft Edge WebView2 ${next.engine_version}` : 'Microsoft Edge WebView2';
   $('update-note').textContent = !next.installed ? 'Only the installed copy of Riffle updates itself'
     : next.update_ready ? `Version ${next.update_ready} is ready and starts the next time you open Riffle`
-    : {checking: 'Checking GitHub', current: 'You have the latest version', failed: 'Could not check for updates. Check your connection and try again'}[next.update_status] || 'Riffle checks for updates once a day';
+    : {checking: 'Checking GitHub', current: 'You have the latest version', failed: 'Could not check for updates. Check your connection and try again'}[next.update_status] || 'Riffle checks for updates each time it opens';
   $('check-updates').disabled = !next.installed || !!next.update_ready || next.update_status === 'checking';
   $('app-action').textContent = next.installed ? 'Uninstall Riffle' : 'Install Riffle';
   $('app-action').onclick = () => next.installed ? send('uninstall_app') : send('install_app');
@@ -736,7 +787,11 @@ function render(next) {
 for (const b of document.querySelectorAll('nav [data-page]')) {
   b.onclick = () => { $('filter').value = ''; send('panel', {value: b.dataset.page}); };
 }
-for (const b of document.querySelectorAll('nav [data-sec]')) b.onclick = () => { section = b.dataset.sec; showSection(); };
+for (const b of document.querySelectorAll('nav [data-sec]')) b.onclick = () => {
+  section = b.dataset.sec;
+  if (state.page === 'settings') showSection();
+  else send('panel', {value: 'settings'});
+};
 for (const [b, name] of [['general', 'settings'], ['search', 'search'], ['browser', 'globe'], ['files', 'download'], ['toolbar', 'sliders'], ['about', 'info']]) document.querySelector(`nav [data-sec=${b}]`).prepend(icon(name));
 $('make-default').onclick = () => send(state.installed ? 'make_default' : 'install_app');
 $('download-change').onclick = () => send('choose_download_dir');
@@ -811,7 +866,7 @@ function renderTasks(rows) {
   }));
 }
 setInterval(() => { if (state?.page === 'tasks') send('tasks_refresh'); }, 2000);
-for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['extensions', 'extension'], ['tasks', 'tasks'], ['settings', 'settings']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
+for (const [b, name] of [['bookmarks', 'star'], ['history', 'clock'], ['downloads', 'download'], ['extensions', 'extension'], ['tasks', 'tasks']]) document.querySelector(`nav [data-page=${b}]`).prepend(icon(name));
 $('done').prepend(icon('back'));
 $('done').onclick = () => send('close_panel');
 $('filter').oninput = showList;
@@ -844,6 +899,7 @@ function save() {
     search_suggest: $('search_suggest').checked,
     auto_update: $('auto_update').checked,
     agent_mode: $('agent_mode').checked,
+    tabs_vertical: $('tabs_vertical').checked,
     toolbar: Object.fromEntries([...document.querySelectorAll('[data-icon]')].map(sel => [sel.dataset.icon, sel.value])),
     download_ask: $('download_ask').checked,
     download_show: $('download_show').checked,

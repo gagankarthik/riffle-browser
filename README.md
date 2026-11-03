@@ -47,7 +47,7 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 - **Tab sleeping.** Only the 3 most recently used tabs stay in memory, tabs idle for 5 minutes are released, tabs playing audio stay awake (changeable in Settings), and hidden tabs are asked to use less. Others are released and reload when selected, shown in grey italics. Unsaved form text and background audio in a sleeping tab are lost.
 - **Safe address bar.** `javascript:` and `file:` text is searched, never run.
 - **Pop-up limit.** Pop-ups open as tabs, at most one per second.
-- **Automatic updates.** The installed copy asks GitHub for a newer release once a day, checks the download against its published SHA-256 hash, and starts the new version the next time you open it. Turn it off in Settings.
+- **Automatic updates.** The installed copy asks GitHub for a newer release each time it opens, checks the download against its published SHA-256 hash, and starts the new version the next time you open it. Turn it off in Settings.
 - **Private by default.** No accounts, sync or telemetry added by Riffle. Searches go to DuckDuckGo with its ads turned off.
 - **Private windows.** Open in their own window with an explainer page. They keep no history, and their session is erased when the last one closes. The website and your network can still see the visit.
 - **Playing tabs.** A tab playing audio shows a speaker icon.
@@ -58,6 +58,7 @@ To update by hand, close Riffle and run a newer `RiffleSetup.exe`. Your bookmark
 - **Import.** Bring bookmarks from Chrome or Edge. Passwords are never copied.
 - **Simple setup.** A short step-by-step installer, with a folder you can change and no administrator rights needed.
 - **Tidy bookmarks bar.** Drag bookmarks to arrange them. Anything that does not fit sits behind a double arrow.
+- **Vertical tabs and tab groups.** Show tabs in a side list, and group them with a name and colour. Groups collapse with a click and come back with your saved tabs.
 - **Reader mode.** A book icon appears on pages that look like articles and shows just the text.
 - **Customisable toolbar.** Settings, Toolbar sets each icon beside the address bar to always show, show when needed, or hide. Hidden ones stay in the menu.
 - **Picture-in-picture.** Ctrl+Shift+P, the menu or the music dialog floats a playing video.
@@ -153,7 +154,7 @@ No. Riffle runs only on Windows, because it relies on the Windows WebView2 engin
 
 ### Does Riffle collect my data?
 
-Riffle adds no accounts, sync or telemetry. It does contact GitHub once a day to check for updates, which you can turn off in Settings, and it downloads filter list updates every few days.
+Riffle adds no accounts, sync or telemetry. It does contact GitHub each time it opens to check for updates, which you can turn off in Settings, and it downloads filter list updates every few days.
 
 ### Can AI agents use Riffle?
 

@@ -15,118 +15,76 @@
 <meta property="og:image" content="https://gagankarthik.github.io/riffle-browser/shots/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Riffle browser with its shield panel open, showing items blocked on an ad-blocker test page">
+<meta property="og:image:alt" content="Riffle browser showing an example news page with its ads">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0b6e8f">
 <meta name="robots" content="index, follow">
 <script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Riffle", "description": "A free, open-source Windows browser with built-in ad blocking, tab sleeping and no accounts.", "url": "https://gagankarthik.github.io/riffle-browser/", "applicationCategory": "BrowserApplication", "operatingSystem": "Windows", "image": "https://gagankarthik.github.io/riffle-browser/shots/og.jpg", "screenshot": "https://gagankarthik.github.io/riffle-browser/shots/shield.webp", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "downloadUrl": "https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe", "codeRepository": "https://github.com/gagankarthik/riffle-browser"}
+{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Riffle", "description": "A free, open-source Windows browser with built-in ad blocking, tab sleeping and no accounts.", "url": "https://gagankarthik.github.io/riffle-browser/", "applicationCategory": "BrowserApplication", "operatingSystem": "Windows", "image": "https://gagankarthik.github.io/riffle-browser/shots/og.jpg", "screenshot": "https://gagankarthik.github.io/riffle-browser/shots/clean.webp", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "downloadUrl": "https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe", "codeRepository": "https://github.com/gagankarthik/riffle-browser"}
 </script>
 <script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Riffle free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's free and open source under the MIT license, and you can read every line on GitHub."}}, {"@type": "Question", "name": "Will my sites work?", "acceptedAnswer": {"@type": "Answer", "text": "Riffle uses the WebView2 engine built into Windows, the same one behind Microsoft Edge, so sites render as they do there. If ad blocking breaks a site, turn it off for that site from the shield."}}, {"@type": "Question", "name": "Why does Windows warn me about the installer?", "acceptedAnswer": {"@type": "Answer", "text": "The installer isn't code-signed yet, so Windows treats it as a new app. Choose More info, then Run anyway. Each release lists a checksum so you can confirm the file."}}, {"@type": "Question", "name": "Does Riffle collect my data?", "acceptedAnswer": {"@type": "Answer", "text": "Riffle adds no accounts, sync or telemetry. It does contact GitHub once a day for updates, and downloads filter lists every few days. Address bar search suggestions go to your search engine, and you can turn those off too."}}, {"@type": "Question", "name": "How do I remove it?", "acceptedAnswer": {"@type": "Answer", "text": "Use Windows Settings, Apps. It asks whether to delete your bookmarks, history and logins too, and never touches files you downloaded."}}, {"@type": "Question", "name": "Does it run on Mac or Linux?", "acceptedAnswer": {"@type": "Answer", "text": "No. Riffle runs only on Windows."}}]}
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Riffle free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It's free and open source under the MIT license, and you can read every line on GitHub."}}, {"@type": "Question", "name": "Will my sites work?", "acceptedAnswer": {"@type": "Answer", "text": "Riffle uses the WebView2 engine built into Windows, the same one behind Microsoft Edge, so sites render as they do there. If ad blocking breaks a site, turn it off for that site from the shield."}}, {"@type": "Question", "name": "Why does Windows warn me about the installer?", "acceptedAnswer": {"@type": "Answer", "text": "The installer isn't code-signed yet, so Windows treats it as a new app. Choose More info, then Run anyway. Each release lists a checksum so you can confirm the file."}}, {"@type": "Question", "name": "Does Riffle collect my data?", "acceptedAnswer": {"@type": "Answer", "text": "Riffle adds no accounts, sync or telemetry. It does contact GitHub each time it opens for updates, and downloads filter lists every few days. Address bar search suggestions go to your search engine, and you can turn those off too."}}, {"@type": "Question", "name": "How do I remove it?", "acceptedAnswer": {"@type": "Answer", "text": "Use Windows Settings, Apps. It asks whether to delete your bookmarks, history and logins too, and never touches files you downloaded."}}, {"@type": "Question", "name": "Does it run on Mac or Linux?", "acceptedAnswer": {"@type": "Answer", "text": "No. Riffle runs only on Windows."}}]}
 </script>
-<link rel="preload" href="fonts/league-spartan-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/figtree-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></symbol>
-  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
-  <symbol id="i-forward" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
-  <symbol id="i-reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 4v4.5h-4.5"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.500 2.600 5.400 5.900.8-4.300 4.100 1 5.900-5.200-2.800-5.200 2.800 1-5.900-4.300-4.100 5.900-.8z"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.500 3 8 7 10 4-2 7-5.500 7-10V6z"/></symbol>
   <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .5a12 12 0 0 0-3.800 23.400c.6.1.8-.3.8-.6v-2.100c-3.300.7-4-1.400-4-1.400-.6-1.400-1.400-1.800-1.400-1.800-1.100-.7.1-.7.1-.7 1.200.1 1.800 1.200 1.800 1.200 1.100 1.800 2.800 1.300 3.500 1 .1-.8.4-1.300.8-1.600-2.700-.3-5.500-1.300-5.500-5.900 0-1.300.5-2.400 1.200-3.200-.1-.3-.5-1.500.1-3.200 0 0 1-.3 3.300 1.200a11.500 11.500 0 0 1 6 0c2.300-1.500 3.300-1.200 3.300-1.200.7 1.700.2 2.900.1 3.200.8.8 1.200 1.900 1.200 3.200 0 4.600-2.800 5.600-5.500 5.900.4.400.8 1.100.8 2.200v3.300c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></symbol>
-  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/></symbol>
-  <symbol id="i-feather" viewBox="0 0 24 24"><path d="M20 4a6 6 0 0 0-8.500 0L5 10.500V19h8.500L20 12.500A6 6 0 0 0 20 4zM16 8 3 21M17.500 14H10"/></symbol>
-  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
 </svg>
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
-  <a class="brand" href="#main"><img src="logo.svg" alt="" width="32" height="32">Riffle</a>
+  <a class="brand" href="#main"><img src="logo.svg" alt="" width="28" height="28">Riffle</a>
   <nav aria-label="Main">
-    <a href="#blocking">Blocking</a>
-    <a href="#features">Features</a>
+    <a href="#memory">Memory</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#customise">Customise</a>
     <a href="#faq">Questions</a>
     <a class="icon-link" href="https://github.com/gagankarthik/riffle-browser" aria-label="Riffle on GitHub"><svg class="i gh" aria-hidden="true"><use href="#i-github"></use></svg></a>
   </nav>
-  <a class="button small" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>Download</a>
+  <a class="button small" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe">Download</a>
 </header>
 
 <main id="main">
   <section class="hero">
-    <h1>Riffle: the browser that blocks ads</h1>
-    <p class="hero-lead">A free Windows browser that is only a few megabytes. It stops ads, trackers and fake redirects before they load, with nothing to add and no account to make.</p>
-    <div class="cta">
-        <a class="button" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>Download for Windows</a>
-        <a class="text-link" href="https://github.com/gagankarthik/riffle-browser"><svg class="i gh" aria-hidden="true"><use href="#i-github"></use></svg>View on GitHub</a>
-      <p class="note" data-release>Free and open source. No administrator rights needed.</p>
-    </div>
-
-    <figure class="browser" data-ui id="demo">
-      <div class="b-strip">
-        <div class="b-tab"><span class="b-dot"></span>The Daily Current<svg class="i" aria-hidden="true"><use href="#i-close"></use></svg></div>
-      </div>
-      <div class="b-nav">
-        <svg class="i" aria-hidden="true"><use href="#i-back"></use></svg>
-        <svg class="i off" aria-hidden="true"><use href="#i-forward"></use></svg>
-        <svg class="i" aria-hidden="true"><use href="#i-reload"></use></svg>
-        <div class="b-address"><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg>news.example/rivers<svg class="i end" aria-hidden="true"><use href="#i-star"></use></svg></div>
-        <span class="b-shield"><svg class="i" aria-hidden="true"><use href="#i-shield"></use></svg></span>
-      </div>
-      <div class="compare" id="compare">
-        <article class="b-page">
-          <span class="side-label right">With Riffle</span>
-          <h2>Where the water runs fast</h2>
-          <p class="b-by">The Daily Current</p>
-          <svg class="b-picture" viewBox="0 0 800 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="800" height="260" fill="#9cc7d6"/><path d="M0 92 180 54l150 34 170-46 300 56v162H0z" fill="#3f7f6d"/><path d="M0 142c130-22 270 12 400-6s270-20 400 2v122H0z" fill="#0b6e8f"/><g fill="none" stroke="#d6e5ea" stroke-width="4" stroke-linecap="round"><path d="M70 172q24-12 48 0t48 0M300 160q24-12 48 0t48 0M560 176q24-12 48 0t48 0M170 214q24-12 48 0t48 0M430 222q24-12 48 0t48 0"/></g><g fill="#41525c"><ellipse cx="250" cy="192" rx="30" ry="12"/><ellipse cx="520" cy="196" rx="38" ry="14"/><ellipse cx="660" cy="226" rx="26" ry="10"/><ellipse cx="96" cy="232" rx="32" ry="12"/></g></svg>
-          <p>A riffle is the shallow stretch of a stream where water hurries over stones. Its surface breaks into small, quick waves, and you can hear it before you see it.</p>
-          <p>Riffles mix air into the water, which is why so much river life gathers around them. Below each one the stream slows again and settles into a pool.</p>
-          <p>A good riffle is easy to find from the bank. Look for the place where smooth water suddenly turns bright and busy, then follow the sound upstream.</p>
-        </article>
-        <div class="b-page with-ads" aria-hidden="true">
-          <span class="side-label">With ads</span>
-          <div class="ad ad-wide"><b>You won a phone!</b><span>Claim your prize in 30 seconds</span></div>
-          <h2>Where the water runs fast</h2>
-          <p class="b-by">The Daily Current</p>
-          <div class="ad-row">
-            <div class="ad ad-tall"><b>Download now</b><span>Your file is ready</span><i>Start</i></div>
-            <div>
-              <div class="ad ad-dark"><b>Your PC is at risk</b><span>Scan now. 3 threats found</span></div>
-              <svg class="b-picture" viewBox="0 0 800 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="800" height="260" fill="#9cc7d6"/><path d="M0 92 180 54l150 34 170-46 300 56v162H0z" fill="#3f7f6d"/><path d="M0 142c130-22 270 12 400-6s270-20 400 2v122H0z" fill="#0b6e8f"/><g fill="none" stroke="#d6e5ea" stroke-width="4" stroke-linecap="round"><path d="M70 172q24-12 48 0t48 0M300 160q24-12 48 0t48 0M560 176q24-12 48 0t48 0M170 214q24-12 48 0t48 0M430 222q24-12 48 0t48 0"/></g><g fill="#41525c"><ellipse cx="250" cy="192" rx="30" ry="12"/><ellipse cx="520" cy="196" rx="38" ry="14"/><ellipse cx="660" cy="226" rx="26" ry="10"/><ellipse cx="96" cy="232" rx="32" ry="12"/></g></svg>
-              <p>A riffle is the shallow stretch of a stream where water hurries over stones. Its surface breaks into small, quick waves, and you can hear it before you see it.</p>
-            </div>
-          </div>
-          <div class="ad ad-pop"><b>Allow notifications?</b><span>Click Allow to continue reading</span></div>
-        </div>
-        <div class="handle" aria-hidden="true"><span><svg class="i" viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
-        <input id="compare-range" type="range" min="0" max="100" value="50" aria-label="Compare the page with ads and with Riffle. Left shows ads, right shows Riffle.">
-      </div>
+    <h1>The browser that stops ads before they load</h1>
+    <p class="lead">Riffle is a free browser for Windows. Ad blocking is built in rather than added as an extension, and you don't need an account.</p>
+    <a class="button" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>Download for Windows</a>
+    <p class="note" data-release>Free and open source. No administrator rights needed.</p>
+    <figure class="compare" id="compare">
+      <img src="shots/clean.webp" width="1600" height="840" alt="Riffle showing an example news article with no ads.">
+      <img class="with-ads" src="shots/ads.webp" width="1600" height="840" alt="The same article as it looks with banner, sidebar and pop-up style ads." >
+      <span class="side-label">With ads</span>
+      <span class="side-label right">With Riffle</span>
+      <div class="handle" aria-hidden="true"><span><svg class="i" viewBox="0 0 24 24"><path d="m9 7-5 5 5 5M15 7l5 5-5 5"/></svg></span></div>
+      <input id="compare-range" type="range" min="0" max="100" value="50" aria-label="Compare the page with ads and with Riffle">
     </figure>
-    <p class="note demo-note">Drag the line to compare. An example page, written to show what Riffle does.</p>
+    <p class="note">Drag to compare. Real Riffle windows, showing an example page we wrote.</p>
   </section>
 
-  <section class="proof" id="blocking">
+  <section class="feature" id="memory">
     <div>
-      <h2>Blocking you can check</h2>
-      <p>Riffle runs Brave's open-source engine with EasyList, EasyPrivacy, uBlock filters and Peter Lowe's list, refreshed every few days. On adblock-tester.com, version 0.3 scored 98 of 100.</p>
-      <p>Sponsored posts, and ads written into a page's own text or video, can still get through. If a site breaks, the shield turns blocking off for that one site.</p>
+      <h2>Tabs give back their memory</h2>
+      <p>Only your recent tabs stay loaded. The rest sleep and reload when you pick them, and tabs playing audio stay awake. The task manager shows exactly what each one is using.</p>
     </div>
-    <div class="panel-demo" data-ui role="img" aria-label="Riffle's shield panel showing 31 items blocked on adblock-tester.com, with switches for blocking ads and allowing pop-ups on that site.">
-      <div class="pd-top"><strong>31 items blocked on this page</strong><span>adblock-tester.com</span></div>
-      <div class="pd-row"><div><b>Block ads on this site</b><span>Turn this off if the site looks broken or won't play. The page reloads.</span></div><i class="on"></i></div>
-      <div class="pd-row"><div><b>Allow pop-ups and redirects</b><span>For sites you trust that need them, such as sign-in or payment windows.</span></div><i></i></div>
-    </div>
+    <img src="shots/tasks.webp" width="1060" height="556" loading="lazy" alt="Riffle's task manager listing tabs and processes with the memory each one uses.">
   </section>
 
-  <section class="features" id="features">
-    <h2>Private, safer, light and yours</h2>
-    <div class="feature-list">
-      <div><h3><svg class="i" aria-hidden="true"><use href="#i-lock"></use></svg>Private</h3><ul><li>No accounts, sync or telemetry</li><li>Bookmarks and history stay on your PC</li><li>Private windows for browsing you want kept off your history</li></ul></div>
-      <div><h3><svg class="i" aria-hidden="true"><use href="#i-shield"></use></svg>Safer</h3><ul><li>Ads, trackers and fake redirects stopped</li><li>Clear warnings for unsafe connections</li><li>Updates checked against a published checksum</li></ul></div>
-      <div><h3><svg class="i" aria-hidden="true"><use href="#i-feather"></use></svg>Light</h3><ul><li>Old tabs free their memory until you pick them</li><li>A task manager shows what uses memory</li><li>A download of a few megabytes</li></ul></div>
-      <div><h3><svg class="i" aria-hidden="true"><use href="#i-sliders"></use></svg>Yours</h3><ul><li>Show or hide each toolbar icon</li><li>Reader mode for articles, Ctrl+Shift+P for floating video</li><li>Agent mode for AI tools like agent-browser, off until you ask</li></ul></div>
+  <section class="feature flip" id="customise">
+    <div>
+      <h2>Tabs and tools arranged your way</h2>
+      <p>Keep tabs on top or in a side list, sort them into named, coloured groups, and choose which icons show beside the address bar.</p>
+    </div>
+    <img src="shots/toolbar.webp" width="1060" height="556" loading="lazy" alt="Riffle's toolbar settings, with a choice for each icon beside the address bar.">
+  </section>
+
+  <section class="facts" id="privacy">
+    <h2>Private by default, and open to check</h2>
+    <div class="fact-list">
+      <div><h3>No account, no telemetry</h3><p>Bookmarks and history stay on your PC. Riffle contacts GitHub for updates and downloads public filter lists. Search suggestions go to your search engine, and you can turn them off.</p></div>
+      <div><h3>Blocking that isn't an extension</h3><p>Riffle runs Brave's open-source engine with public filter lists, so browser extension limits don't apply to it.</p></div>
+      <div><h3>Updates you can verify</h3><p>Riffle checks for updates each time it opens and confirms every download against its published checksum.</p></div>
     </div>
   </section>
 
@@ -136,45 +94,28 @@
       <details><summary>Is Riffle free?</summary><p>Yes. It's free and open source under the MIT license, and you can read every line on GitHub.</p></details>
       <details><summary>Will my sites work?</summary><p>Riffle uses the WebView2 engine built into Windows, the same one behind Microsoft Edge, so sites render as they do there. If ad blocking breaks a site, turn it off for that site from the shield.</p></details>
       <details><summary>Why does Windows warn me about the installer?</summary><p>The installer isn't code-signed yet, so Windows treats it as a new app. Choose More info, then Run anyway. Each release lists a checksum so you can confirm the file.</p></details>
-      <details><summary>Does Riffle collect my data?</summary><p>Riffle adds no accounts, sync or telemetry. It does contact GitHub once a day for updates, and downloads filter lists every few days. Address bar search suggestions go to your search engine, and you can turn those off too.</p></details>
+      <details><summary>Does Riffle collect my data?</summary><p>Riffle adds no accounts, sync or telemetry. It does contact GitHub each time it opens for updates, and downloads filter lists every few days. Address bar search suggestions go to your search engine, and you can turn those off too.</p></details>
       <details><summary>How do I remove it?</summary><p>Use Windows Settings, Apps. It asks whether to delete your bookmarks, history and logins too, and never touches files you downloaded.</p></details>
       <details><summary>Does it run on Mac or Linux?</summary><p>No. Riffle runs only on Windows.</p></details>
     </div>
   </section>
 
   <section class="close" id="download">
-    <div>
-      <h2>Download Riffle</h2>
-      <p data-release>Free and open source. No administrator rights needed.</p>
-    </div>
-    <div>
-    <a class="button light" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>Download RiffleSetup.exe</a>
-    <p class="small">If Windows warns about a new app, choose More info, then Run anyway.</p>
-    </div>
+    <h2>Get Riffle for Windows</h2>
+    <a class="button" href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe"><svg class="i" aria-hidden="true"><use href="#i-download"></use></svg>Download for Windows</a>
+    <p class="note" data-release>Free and open source. No administrator rights needed.</p>
+    <p class="note">The installer isn't code-signed yet. If Windows warns you, choose More info, then Run anyway.</p>
   </section>
 </main>
 
 <footer>
-  <div class="foot-brand">
-    <a class="brand" href="#main"><img src="logo.svg" alt="" width="28" height="28">Riffle</a>
-    <p>A small Windows browser that blocks ads and trackers. Free and open source.</p>
-  </div>
-  <nav aria-label="Product">
-    <h2>Product</h2>
-    <ul>
-      <li><a href="https://github.com/gagankarthik/riffle-browser/releases/latest/download/RiffleSetup.exe">Download</a></li>
-      <li><a href="#features">Features</a></li>
-      <li><a href="#faq">Questions</a></li>
-    </ul>
-  </nav>
-  <nav aria-label="Project">
-    <h2>Project</h2>
-    <ul>
-      <li><a href="https://github.com/gagankarthik/riffle-browser"><svg class="i gh" aria-hidden="true"><use href="#i-github"></use></svg>GitHub</a></li>
-      <li><a href="https://github.com/gagankarthik/riffle-browser/releases">Release notes</a></li>
-      <li><a href="https://github.com/gagankarthik/riffle-browser/blob/main/LICENSE">MIT license</a></li>
-    </ul>
-  </nav>
+  <a class="brand" href="#main"><img src="logo.svg" alt="" width="24" height="24">Riffle</a>
+  <ul>
+    <li><a href="https://github.com/gagankarthik/riffle-browser">GitHub</a></li>
+    <li><a href="https://github.com/gagankarthik/riffle-browser/releases">Release notes</a></li>
+    <li><a href="https://github.com/gagankarthik/riffle-browser#for-ai-agents">For AI agents</a></li>
+    <li><a href="https://github.com/gagankarthik/riffle-browser/blob/main/LICENSE">MIT license</a></li>
+  </ul>
 </footer>
 <script src="script.js"></script>
 </body>

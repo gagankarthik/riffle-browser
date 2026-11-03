@@ -1,7 +1,11 @@
 // Reader mode: the page's main article alone, copied as plain text and pictures into a sealed layer. Run again to close.
 (() => {
   const open = document.getElementById('riffle-reader');
-  if (open) return open.remove();
+  if (open) {
+    open.remove();
+    document.documentElement.style.removeProperty('overflow');
+    return;
+  }
   const clean = text => text.replace(/\s+/g, ' ').trim();
   const score = el => [...el.querySelectorAll('p')].reduce((sum, p) => sum + clean(p.textContent).length, 0);
   let best = document.querySelector('article, [role=main], main') || document.body;
@@ -59,10 +63,11 @@
     note.textContent = "Riffle couldn't find an article on this page.";
     article.replaceChildren(note);
   }
-  const close = () => { host.remove(); removeEventListener('keydown', esc, true); };
+  const close = () => { host.remove(); document.documentElement.style.removeProperty('overflow'); removeEventListener('keydown', esc, true); };
   const esc = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
   addEventListener('keydown', esc, true);
   root.querySelector('button').onclick = close;
   document.documentElement.append(host);
+  document.documentElement.style.setProperty('overflow', 'hidden', 'important'); // the page's scrollbar goes while the reader's shows
   root.getElementById('page').focus();
 })();

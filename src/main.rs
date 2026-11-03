@@ -38,6 +38,7 @@ const RELEASES: &str = "https://github.com/gagankarthik/riffle-browser/releases/
 const LATEST_RELEASE: &str = "https://api.github.com/repos/gagankarthik/riffle-browser/releases/latest";
 const UPDATE_GAP_SECS: u64 = 86_400; // how often GitHub is asked
 const UPDATE_WAKE_SECS: u64 = 6 * 3600; // so a browser left open for days still updates
+const UPDATE_OPEN_GAP_SECS: u64 = 60; // two windows opened together ask once
 const TOOLBAR_HEIGHT: f64 = 81.0;
 const BOOKMARKS_BAR_HEIGHT: f64 = 32.0;
 const NAV_ROW_BOTTOM: f64 = 80.0; // tab row plus address row in toolbar.html
@@ -57,6 +58,8 @@ const BOOKMARK_HTML: &str = include_str!("bookmark.html");
 const ZOOM_HTML: &str = include_str!("zoom.html");
 const TAB_MENU_HTML: &str = include_str!("tabmenu.html");
 const MARKS_HTML: &str = include_str!("marks.html");
+const GROUP_HTML: &str = include_str!("group.html");
+const FULLSCREEN_EXIT_HTML: &str = r#"<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"><title>Riffle exit fullscreen</title><style>html,body{margin:0;height:100%;background:#202124}button{display:grid;place-items:center;width:100%;height:100%;padding:0;border:0;background:none;color:#fff;cursor:pointer}button:hover{background:#3c4043}svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}</style><button aria-label="Exit fullscreen" title="Exit fullscreen (Esc)" onclick="window.ipc.postMessage(JSON.stringify({cmd:'fullscreen_exit'}))"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></html>"#;
 const TAB_SEARCH_HTML: &str = include_str!("tabsearch.html");
 const ERROR_HTML: &str = include_str!("error.html");
 const SLOW_HTML: &str = include_str!("slow.html");
@@ -64,11 +67,19 @@ const SLOW_SECS: u64 = 12; // a page with nothing to show after this long gets a
 const SLOW_NOTE: (f64, f64) = (380.0, 120.0);
 const WELCOME_HTML: &str = include_str!("welcome.html");
 const WELCOME_URL: &str = "riffle:welcome";
-const WELCOME_FOR: &str = "0.4"; // change when welcome.html lists new features, and it shows once more
+const WELCOME_FOR: &str = "0.5"; // change when welcome.html lists new features, and it shows once more
 const READER_JS: &str = include_str!("reader.js");
-const TAB_MENU_SIZE: (f64, f64) = (220.0, 208.0);
+const TAB_MENU_SIZE: (f64, f64) = (240.0, 272.0);
 const TAB_SEARCH_SIZE: (f64, f64) = (480.0, 380.0);
 const MARKS_WIDTH: f64 = 280.0;
+const MARK_MENU: (f64, f64) = (240.0, 208.0);
+const FULLSCREEN_EXIT_SIZE: f64 = 56.0;
+const FULLSCREEN_EXIT_AWAY: i32 = 140; // how far down the cursor goes before the X leaves
+const TAB_SIDEBAR_WIDTH: f64 = 240.0;
+const TAB_SIDEBAR_NARROW: f64 = 48.0; // icons only, in a small window
+const GROUP_DIALOG: (f64, f64) = (264.0, 136.0);
+// White text on each of these passes 4.5:1.
+const GROUP_COLORS: &[(&str, &str)] = &[("#5f6b73", "Grey"), ("#1a66c9", "Blue"), ("#0b6e8f", "Teal"), ("#1a7f37", "Green"), ("#9a6700", "Amber"), ("#c5221f", "Red"), ("#b3186d", "Pink"), ("#7b3fc4", "Purple")];
 const IMPORT_LIMIT: usize = 5000;
 const ZOOM_POPUP: (f64, f64) = (248.0, 52.0);
 const ZOOM_LEVELS: &[f64] = &[0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0]; // the steps Chrome and Edge use
@@ -226,7 +237,16 @@ const AD_SCRIPT: &str = r#"
       }
     }
     const real = e.target.closest?.('a[href],button,input[type=submit],input[type=button],input[type=image],[role=button],[role=link]');
-    window.ipc.postMessage(real && window === top ? 'click:1' : 'click:0');
+    // A click on a link vouches for where that link goes, not for whatever the page does with the click.
+    if (a && window === top && /^https?:/.test(a.href)) window.ipc.postMessage('click:link:' + a.href);
+    else window.ipc.postMessage(real && window === top ? 'click:1' : 'click:0');
+  }, true);
+  // Ad scripts often act on the press, before any click, so the press has to count too.
+  addEventListener('pointerdown', e => {
+    if (!e.isTrusted || e.button !== 0) return;
+    const a = link(e), real = e.target.closest?.('a[href],button,input[type=submit],input[type=button],input[type=image],[role=button],[role=link]');
+    if (a && window === top && /^https?:/.test(a.href)) window.ipc.postMessage('click:link:' + a.href);
+    else window.ipc.postMessage(real && window === top ? 'click:1' : 'click:0');
   }, true);
   addEventListener('submit', e => { if (e.isTrusted && window === top) window.ipc.postMessage('click:1'); }, true);
   addEventListener('auxclick', e => { if (e.isTrusted && e.button === 1 && link(e) && window === top) window.ipc.postMessage('click:1'); }, true);
@@ -345,13 +365,14 @@ struct Guard {
     nav_url: String, // the navigation last allowed, which may never replace that page
     vouched_until: Instant,
     last_click: Option<(Instant, bool)>, // (trusted until, on a real link or button)
+    click_link: Option<String>, // where the clicked link goes, until that navigation starts
     blocked: u32,
     stopped: Option<String>, // the last pop-up or redirect stopped, which the shield offers to open
 }
 
 impl Guard {
     fn new() -> Rc<RefCell<Guard>> {
-        Rc::new(RefCell::new(Guard { top_url: String::new(), nav_url: String::new(), vouched_until: Instant::now(), last_click: None, blocked: 0, stopped: None }))
+        Rc::new(RefCell::new(Guard { top_url: String::new(), nav_url: String::new(), vouched_until: Instant::now(), last_click: None, click_link: None, blocked: 0, stopped: None }))
     }
     fn vouch(&mut self) {
         self.vouched_until = Instant::now() + Duration::from_secs(VOUCH_SECS);
@@ -389,6 +410,14 @@ enum Msg {
     Processes(Vec<(u32, COREWEBVIEW2_PROCESS_KIND, Vec<String>)>),
 }
 
+#[derive(Clone)]
+struct TabGroup {
+    id: u64,
+    name: String,
+    color: String,
+    collapsed: bool,
+}
+
 struct Tab {
     id: u64,
     title: String,
@@ -405,6 +434,7 @@ struct Tab {
     devtools: Option<isize>, // its DevTools window, docked inside the browser window
     zoom: f64, // kept here so it survives the tab sleeping
     pinned: bool, // stays left and awake, and comes back next time
+    group: Option<u64>,
     has_video: bool,
     readable: bool, // the page looks like an article, so reader mode can help
     crashed_url: Option<String>, // the page to go back to while an error page shows
@@ -439,6 +469,7 @@ impl Popup {
 struct Browser {
     window: Window,
     context: WebContext,
+    window_shown: bool,
     ui_context: Option<WebContext>, // agent mode only: keeps Riffle's own interface out of the agent's reach
     args: String,
     proxy: EventLoopProxy<Msg>,
@@ -487,6 +518,13 @@ struct Browser {
     zoom_popup: Option<Popup>,
     site_zoom: Value, // host to level, for sites not at 100%
     tab_menu: Option<(Popup, u64)>,
+    fullscreen_exit: Option<Popup>, // the X that appears when the cursor reaches the top of the screen
+    fullscreen_watch: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    sidebar: Option<WebView>, // the tab list when tabs are on the side
+    groups: Vec<TabGroup>,
+    group_dialog: Option<(Popup, u64)>,
+    menu_at: (f64, f64),
+    mark_target: Option<String>, // the bookmark a right-click menu is for
     marks_menu: Option<(Popup, usize)>, // the bookmarks that do not fit on the bar, from this index on
     tab_search: Option<Popup>,
     last_download: Option<Instant>,
@@ -543,6 +581,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .build(&event_loop)?;
 
     window.set_background_color(Some(WINDOW_COLOR));
+    set_window_alpha(window.hwnd() as isize, Some(0)); // clear until the toolbar has drawn, so there's never an empty window
     let data_dir = std::env::var_os("LOCALAPPDATA")
         .map(|d| std::path::PathBuf::from(d).join("Riffle"))
         .ok_or("LOCALAPPDATA is not set")?;
@@ -563,6 +602,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         window,
         context: WebContext::new(Some(data_dir.clone())),
         // A second engine process, so it costs memory only while agent mode is on.
+        window_shown: false,
         ui_context: ((agent_mode || agent_setting) && std::env::var_os("RIFFLE_AGENT_SEE_UI").is_none()).then(|| WebContext::new(Some(data_dir.join("agent-ui")))),
         args: browser_args(agent_mode || agent_setting),
         proxy: event_loop.create_proxy(),
@@ -611,6 +651,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         zoom_popup: None,
         site_zoom,
         tab_menu: None,
+        fullscreen_exit: None,
+        fullscreen_watch: Default::default(),
+        sidebar: None,
+        groups: Vec::new(),
+        group_dialog: None,
+        menu_at: (0.0, 36.0),
+        mark_target: None,
         marks_menu: None,
         tab_search: None,
         last_download: None,
@@ -624,6 +671,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         shield_height: 200.0,
     };
     browser.build_toolbar()?;
+    browser.apply_tab_position();
+    let show_proxy = event_loop.create_proxy();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(3)); // a toolbar that never reports must not leave Riffle invisible
+        drop(show_proxy.send_event(Msg::Toolbar(json!({"cmd": "painted"}).to_string())));
+    });
     let start = std::env::args().skip(1).find(|a| !a.starts_with("--")).and_then(|a| address_to_url(&a, browser.search()));
     browser.restore_session();
     match start {
@@ -634,7 +687,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
     }
 
-    if !private_window {
+    if !private_window && !browser.moved_window {
         keep_updated(browser.data_dir.clone(), event_loop.create_proxy());
     }
     // Once ever, and not for an agent that has no one to read it.
@@ -669,6 +722,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 browser.bookmark_dialog = None;
                 browser.zoom_popup = None;
                 browser.tab_menu = None;
+                browser.group_dialog = None;
                 browser.marks_menu = None;
                 browser.tab_search = None;
                 browser.slow_note = None;
@@ -763,7 +817,108 @@ impl Browser {
         let (y, height) = if toolbar { (0.0, top) } else { (top, (size.height - top).max(0.0)) };
         let docked = !toolbar && !self.fullscreen && self.tabs.iter().any(|t| t.id == self.active && t.devtools.is_some());
         let width = if docked { (size.width * (1.0 - self.devtools_share) - DEVTOOLS_DIVIDER).max(0.0) } else { size.width };
-        Rect { position: LogicalPosition::new(0.0, y).into(), size: ViewSize::new(width, height).into() }
+        let side = if toolbar { 0.0 } else { self.side_width() };
+        Rect { position: LogicalPosition::new(side, y).into(), size: ViewSize::new(if toolbar { width } else { (width - side).max(0.0) }, height).into() }
+    }
+
+    // Only runs while in fullscreen. A page can't report this, because a video's own frame takes the mouse.
+    fn watch_fullscreen_cursor(&self) {
+        let (flag, proxy) = (self.fullscreen_watch.clone(), self.proxy.clone());
+        let top = self.window.outer_position().map_or(0, |p| p.y);
+        std::thread::spawn(move || {
+            let mut near = false;
+            while flag.load(std::sync::atomic::Ordering::Relaxed) {
+                let mut at = windows::Win32::Foundation::POINT::default();
+                // SAFETY: fills a local value.
+                if unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut at) }.is_ok() {
+                    let y = at.y - top;
+                    if !near && y <= 2 || near && y > FULLSCREEN_EXIT_AWAY {
+                        near = !near;
+                        drop(proxy.send_event(Msg::Toolbar(json!({"cmd": if near { "fullscreen_exit_show" } else { "fullscreen_exit_hide" }}).to_string())));
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+    }
+
+    fn side_width(&self) -> f64 {
+        if self.fullscreen || self.settings["tabs_vertical"] != true {
+            return 0.0;
+        }
+        if self.window.inner_size().to_logical::<f64>(self.window.scale_factor()).width < 640.0 { TAB_SIDEBAR_NARROW } else { TAB_SIDEBAR_WIDTH }
+    }
+
+    fn side_bounds(&self) -> Rect {
+        let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+        let top = self.bounds(true).size.to_logical::<f64>(self.window.scale_factor()).height;
+        Rect { position: LogicalPosition::new(0.0, top).into(), size: ViewSize::new(self.side_width(), (size.height - top).max(0.0)).into() }
+    }
+
+    /// Builds or removes the side tab list to match the setting. It's the toolbar's own page, showing only its tabs.
+    fn apply_tab_position(&mut self) {
+        if self.settings["tabs_vertical"] != true {
+            self.sidebar = None;
+        } else if self.sidebar.is_none() {
+            let proxy = self.proxy.clone();
+            let bounds = self.side_bounds();
+            let html = TOOLBAR_HTML.replace("<title>Riffle toolbar</title>", "<title>Riffle tabs</title>").replace("<!--ICONS-->", &format!("{ICONS_HTML}<script>document.documentElement.classList.add('side')</script>"));
+            let built = ui_view_builder(&mut self.ui_context, &mut self.context, &self.args)
+                .with_browser_extensions_enabled(true)
+                .with_bounds(bounds)
+                .with_html(html)
+                .with_initialization_script(KEY_SCRIPT)
+                .with_drag_drop_handler(|_| true)
+                .with_navigation_handler(is_built_in_page)
+                .with_ipc_handler(move |req| drop(proxy.send_event(Msg::Toolbar(req.body().clone()))))
+                .build_as_child(&self.window);
+            match built {
+                Ok(view) => self.sidebar = Some(view),
+                Err(e) => show_error(&format!("Could not show tabs on the side: {e}")),
+            }
+        }
+        self.layout();
+    }
+
+    fn live_groups(&self) -> Vec<&TabGroup> {
+        self.groups.iter().filter(|g| self.tabs.iter().any(|t| t.group == Some(g.id))).collect()
+    }
+
+    /// Joins a group, sitting right after its last tab so groups stay in one piece.
+    fn put_in_group(&mut self, tab: u64, group: Option<u64>) {
+        let Some(from) = self.tabs.iter().position(|t| t.id == tab) else { return };
+        let mut moved = self.tabs.remove(from);
+        moved.group = None;
+        if let Some(group) = group {
+            let after = self.tabs.iter().rposition(|t| t.group == Some(group));
+            moved.group = Some(group);
+            self.tabs.insert(after.map_or(from, |i| i + 1), moved);
+        } else {
+            // Leaving: out past the end of the group it was in, unless it was already at an edge.
+            let was = self.tabs.get(from).and_then(|t| t.group).filter(|g| from > 0 && self.tabs[from - 1].group == Some(*g));
+            let to = was.and_then(|g| self.tabs.iter().rposition(|t| t.group == Some(g))).map_or(from, |i| i + 1);
+            self.tabs.insert(to, moved);
+        }
+        self.save_session();
+        self.sync_toolbar();
+    }
+
+    fn set_group_collapsed(&mut self, group: u64, collapsed: bool) {
+        if let Some(g) = self.groups.iter_mut().find(|g| g.id == group) {
+            g.collapsed = collapsed;
+        }
+        // The tab in view can't be hidden, so another takes over.
+        if collapsed && self.tabs.iter().any(|t| t.id == self.active && t.group == Some(group)) {
+            let at = self.tabs.iter().position(|t| t.id == self.active).unwrap_or(0);
+            let open = |t: &&Tab| t.group.is_none_or(|g| self.groups.iter().any(|x| x.id == g && !x.collapsed));
+            let next = self.tabs[at..].iter().find(open).or_else(|| self.tabs[..at].iter().rev().find(open)).map(|t| t.id);
+            match next {
+                Some(next) => self.select(next),
+                None => self.open_tab(&self.new_tab_url(), false),
+            }
+        }
+        self.save_session();
+        self.sync_toolbar();
     }
 
     fn build_toolbar(&mut self) -> wry::Result<()> {
@@ -1045,6 +1200,7 @@ impl Browser {
         self.bookmark_dialog = None;
         self.zoom_popup = None;
         self.tab_menu = None;
+        self.group_dialog = None;
         self.marks_menu = None;
         self.tab_search = None;
         self.slow_note = None;
@@ -1268,6 +1424,7 @@ impl Browser {
         }
         let restore = self.settings["restore"] == true;
         let saved = load_json(&self.data_dir.join("session.json"));
+        let mut restored_groups = std::collections::HashMap::new();
         for entry in saved.as_array().into_iter().flatten() {
             let pinned = entry["pinned"] == true;
             if !restore && !pinned {
@@ -1277,8 +1434,18 @@ impl Browser {
             let title = entry["title"].as_str().unwrap_or(url).to_string();
             let id = self.next_id;
             self.next_id += 1;
+            let saved_group = entry["group"]["id"].as_u64();
+            let group = saved_group.map(|old| {
+                *restored_groups.entry(old).or_insert_with(|| {
+                    let new = self.next_id;
+                    self.next_id += 1;
+                    let color = entry["group"]["color"].as_str().filter(|c| GROUP_COLORS.iter().any(|(v, _)| v == c)).unwrap_or(GROUP_COLORS[0].0);
+                    self.groups.push(TabGroup { id: new, name: entry["group"]["name"].as_str().unwrap_or("").to_string(), color: color.to_string(), collapsed: entry["group"]["collapsed"] == true });
+                    new
+                })
+            });
             // Left asleep: only the selected tab loads, so restoring many tabs stays fast.
-            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None, zoom: 1.0, pinned, has_video: false, readable: false, crashed_url: None, nav_seq: None });
+            self.tabs.push(Tab { id, title, url: url.to_string(), loading: false, last_used: 0, private: false, downloads: 0, icon: None, media: None, last_seen: std::time::Instant::now(), guard: Guard::new(), view: None, devtools: None, zoom: 1.0, pinned, group, has_video: false, readable: false, crashed_url: None, nav_seq: None });
         }
     }
 
@@ -1292,7 +1459,7 @@ impl Browser {
         }
         let path = self.data_dir.join("session.json");
         let restore = self.settings["restore"] == true;
-        let tabs: Vec<Value> = self.tabs.iter().filter(|t| !t.private && is_web(&t.url) && (restore || t.pinned)).map(|t| json!({"url": t.url, "title": t.title, "pinned": t.pinned})).collect();
+        let tabs: Vec<Value> = self.tabs.iter().filter(|t| !t.private && is_web(&t.url) && (restore || t.pinned)).map(|t| json!({"group": t.group.and_then(|g| self.groups.iter().find(|x| x.id == g)).map(|g| json!({"id": g.id, "name": g.name, "color": g.color, "collapsed": g.collapsed})), "url": t.url, "title": t.title, "pinned": t.pinned})).collect();
         if tabs.is_empty() {
             let _ = std::fs::remove_file(path);
         } else {
@@ -1361,12 +1528,15 @@ impl Browser {
     }
 
     // Like a dragged-out tab's window: it doesn't take over the saved session.
-    fn open_new_window(&self) {
+    fn open_new_window(&self, url: Option<&str>) {
         let opened = std::env::current_exe().and_then(|exe| {
             let mut command = std::process::Command::new(exe);
             command.arg("--moved");
             if self.args.contains("--remote-debugging-port") {
                 command.arg("--agent");
+            }
+            if let Some(url) = url {
+                command.arg(url);
             }
             command.spawn()
         });
@@ -1566,12 +1736,18 @@ impl Browser {
             return;
         }
         self.fullscreen = on;
+        self.fullscreen_exit = None;
+        self.fullscreen_watch.store(on, std::sync::atomic::Ordering::Relaxed);
+        if on {
+            self.watch_fullscreen_cursor();
+        }
         self.music = None;
         self.menu = None;
         self.shield = None;
         self.bookmark_dialog = None;
         self.zoom_popup = None;
         self.tab_menu = None;
+        self.group_dialog = None;
         self.marks_menu = None;
         self.tab_search = None;
         self.slow_note = None;
@@ -1603,7 +1779,7 @@ impl Browser {
         self.leave_fullscreen(); // each of these needs the browser's own window back
         match name {
             "new_tab" => self.open_tab(&self.new_tab_url(), false),
-            "new_window" => self.open_new_window(),
+            "new_window" => self.open_new_window(None),
             "private_tab" => self.open_private_window(),
             "reopen_tab" => {
                 if let Some(url) = self.closed.pop() {
@@ -1722,6 +1898,9 @@ impl Browser {
                     if guard.stopped.as_deref() == Some(url.as_str()) {
                         guard.stopped = None;
                     }
+                    if guard.click_link.as_deref().is_some_and(|l| same_site(l, &url)) {
+                        guard.click_link = None; // on its way: redirects from here, like a link shortener's, are the link's own
+                    }
                     guard.nav_url = url;
                     drop(nav_started.send_event(Msg::NavStarted(id)));
                     return true;
@@ -1770,8 +1949,21 @@ impl Browser {
             .with_ipc_handler(move |req| {
                 // Answered here rather than through the event loop, so it arrives before the navigation it explains.
                 match req.body().as_str() {
-                    "click:1" => click_guard.borrow_mut().last_click = Some((Instant::now() + Duration::from_secs(TRUST_SECS), true)),
-                    "click:0" => click_guard.borrow_mut().last_click = Some((Instant::now() + Duration::from_secs(TRUST_SECS), false)),
+                    "click:1" => {
+                        let mut guard = click_guard.borrow_mut();
+                        guard.last_click = Some((Instant::now() + Duration::from_secs(TRUST_SECS), true));
+                        guard.click_link = None;
+                    }
+                    "click:0" => {
+                        let mut guard = click_guard.borrow_mut();
+                        guard.last_click = Some((Instant::now() + Duration::from_secs(TRUST_SECS), false));
+                        guard.click_link = None;
+                    }
+                    link if link.starts_with("click:link:") => {
+                        let mut guard = click_guard.borrow_mut();
+                        guard.last_click = Some((Instant::now() + Duration::from_secs(TRUST_SECS), true));
+                        guard.click_link = Some(link["click:link:".len()..].to_string());
+                    }
                     // Choosing from the right-click menu takes longer than a click.
                     "click:menu" => click_guard.borrow_mut().last_click = Some((Instant::now() + Duration::from_secs(MENU_TRUST_SECS), true)),
                     body => drop(shortcut.send_event(Msg::Shortcut(id, body.to_string()))),
@@ -1826,6 +2018,7 @@ impl Browser {
             devtools: None,
             zoom: 1.0,
             pinned: false,
+            group: None,
             has_video: false,
             readable: false,
             crashed_url: None,
@@ -1836,6 +2029,9 @@ impl Browser {
 
     fn select(&mut self, id: u64) {
         let Some(index) = self.tabs.iter().position(|t| t.id == id) else { return };
+        if let Some(group) = self.tabs[index].group.and_then(|g| self.groups.iter_mut().find(|x| x.id == g)) {
+            group.collapsed = false;
+        }
         self.leave_fullscreen();
         self.panel = None;
         self.music = None;
@@ -1844,6 +2040,7 @@ impl Browser {
         self.bookmark_dialog = None;
         self.zoom_popup = None;
         self.tab_menu = None;
+        self.group_dialog = None;
         self.marks_menu = None;
         self.tab_search = None;
         self.slow_note = None;
@@ -1918,6 +2115,9 @@ impl Browser {
     }
 
     fn layout(&self) {
+        if let Some(sidebar) = &self.sidebar {
+            let _ = sidebar.set_bounds(self.side_bounds());
+        }
         if let Some(toolbar) = &self.toolbar {
             let _ = toolbar.set_bounds(self.bounds(true));
         }
@@ -2150,11 +2350,13 @@ impl Browser {
         let tabs: Vec<Value> = self
             .tabs
             .iter()
-            .map(|t| json!({"id": t.id, "title": t.title, "asleep": t.view.is_none(), "active": t.id == self.active, "pinned": t.pinned, "private": t.private, "url": t.url, "icon": t.icon, "loading": t.loading, "playing": t.media.is_some_and(|(playing, _)| playing)}))
+            .map(|t| json!({"id": t.id, "title": t.title, "asleep": t.view.is_none(), "active": t.id == self.active, "pinned": t.pinned, "group": t.group, "private": t.private, "url": t.url, "icon": t.icon, "loading": t.loading, "playing": t.media.is_some_and(|(playing, _)| playing)}))
             .collect();
         let history_state = active.and_then(|t| t.view.as_ref()).map_or((false, false), can_go);
         let state = json!({
             "tabs": tabs,
+            "groups": self.live_groups().iter().map(|g| json!({"id": g.id, "name": g.name, "color": g.color, "collapsed": g.collapsed, "count": self.tabs.iter().filter(|t| t.group == Some(g.id)).count()})).collect::<Vec<_>>(),
+            "vertical": self.settings["tabs_vertical"] == true,
             "url": active.map_or("", |t| if is_web(&t.url) || t.url.starts_with("blob:") { &t.url } else { "" }),
             "loading": active.is_some_and(|t| t.loading),
             "maximized": self.window.is_maximized(),
@@ -2183,6 +2385,9 @@ impl Browser {
             "accent": self.settings["accent"],
         });
         let _ = toolbar.evaluate_script(&format!("render({state})"));
+        if let Some(sidebar) = &self.sidebar {
+            let _ = sidebar.evaluate_script(&format!("render({state})"));
+        }
         let name = if self.private_window { "Riffle Private" } else { "Riffle" };
         let title = active.map_or(name.to_string(), |t| format!("{} - {name}", t.title));
         self.window.set_title(&title);
@@ -2344,6 +2549,16 @@ impl Browser {
                 if let Some(icon) = name.strip_prefix("icon:") {
                     if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == id).filter(|_| icon.len() < 2048 && is_web(icon)) {
                         tab.icon = Some(icon.to_string());
+                        let page = tab.url.clone();
+                        let mut changed = false;
+                        for mark in self.bookmarks.iter_mut().filter(|b| b["url"] == page.as_str()) {
+                            changed |= mark["icon"] != icon;
+                            mark["icon"] = json!(icon);
+                        }
+                        if changed {
+                            self.save_bookmarks();
+                            self.sync_toolbar();
+                        }
                         self.sync_toolbar();
                     }
                     return false;
@@ -2383,6 +2598,13 @@ impl Browser {
                             return self.close_tab(id);
                         }
                         _ => {}
+                    }
+                    return false;
+                }
+                if name == "open_settings" {
+                    // Only Riffle's own new tab page has this button.
+                    if self.tabs.iter().any(|t| t.id == id && !is_web(&t.url)) {
+                        drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "panel", "value": "settings"}).to_string())));
                     }
                     return false;
                 }
@@ -2505,6 +2727,20 @@ impl Browser {
         let Ok(command) = serde_json::from_str::<Value>(raw) else { return self.shortcut(raw) };
         let id = command["id"].as_u64();
         let script = match command["cmd"].as_str().unwrap_or("") {
+            "painted" => {
+                if !self.window_shown {
+                    self.window_shown = true;
+                    let hwnd = self.window.hwnd() as isize;
+                    std::thread::spawn(move || {
+                        for alpha in [64, 128, 192] {
+                            set_window_alpha(hwnd, Some(alpha));
+                            std::thread::sleep(Duration::from_millis(16));
+                        }
+                        set_window_alpha(hwnd, None);
+                    });
+                }
+                return false;
+            }
             "ready" => {
                 self.sync_toolbar();
                 return false;
@@ -2621,12 +2857,137 @@ impl Browser {
                     let to = tab_position(command["value"].as_u64().unwrap_or(from as u64) as usize, pinned, self.tabs.len(), self.tabs[from].pinned);
                     let tab = self.tabs.remove(from);
                     self.tabs.insert(to, tab);
+                    let groups: Vec<Option<u64>> = self.tabs.iter().map(|t| t.group).collect();
+                    self.tabs[to].group = group_after_move(&groups, to);
                     self.save_session();
                 }
                 self.sync_toolbar();
                 return false;
             }
+            "fullscreen_exit_show" => {
+                if self.fullscreen && self.fullscreen_exit.is_none() {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let area = Rect { position: LogicalPosition::new((size.width - FULLSCREEN_EXIT_SIZE) / 2.0, 16.0).into(), size: ViewSize::new(FULLSCREEN_EXIT_SIZE, FULLSCREEN_EXIT_SIZE).into() };
+                    self.fullscreen_exit = self.build_popup(target, FULLSCREEN_EXIT_HTML, "Riffle exit fullscreen", area, false);
+                }
+                return false;
+            }
+            "fullscreen_exit_hide" => {
+                self.fullscreen_exit = None;
+                return false;
+            }
+            "fullscreen_exit" => {
+                self.leave_fullscreen();
+                return false;
+            }
+            "group_toggle" => {
+                if let Some(group) = command["group"].as_u64() {
+                    let collapsed = self.groups.iter().any(|g| g.id == group && g.collapsed);
+                    self.set_group_collapsed(group, !collapsed);
+                }
+                return false;
+            }
+            "group_menu" => {
+                self.group_dialog = None;
+                if let Some(group) = command["group"].as_u64() {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let x = command["x"].as_f64().unwrap_or(self.menu_at.0).clamp(0.0, (size.width - GROUP_DIALOG.0).max(0.0));
+                    let y = command["y"].as_f64().map_or(self.menu_at.1, |y| y + self.bounds(true).size.to_logical::<f64>(self.window.scale_factor()).height);
+                    let area = Rect { position: LogicalPosition::new(x, y).into(), size: ViewSize::new(GROUP_DIALOG.0, GROUP_DIALOG.1).into() };
+                    if let Some(popup) = self.build_popup(target, GROUP_HTML, "Riffle tab group", area, true) {
+                        self.group_dialog = Some((popup, group));
+                    }
+                }
+                return false;
+            }
+            "group_ready" => {
+                if let Some((popup, id)) = &self.group_dialog {
+                    if let Some(g) = self.groups.iter().find(|g| g.id == *id) {
+                        let _ = popup.evaluate_script(&format!("render({})", json!({"name": g.name, "color": g.color, "colors": GROUP_COLORS, "theme": self.settings["theme"], "private": self.private_window})));
+                    }
+                }
+                return false;
+            }
+            "group_save" => {
+                let id = self.group_dialog.as_ref().map(|(_, id)| *id);
+                if let Some(g) = self.groups.iter_mut().find(|g| Some(g.id) == id) {
+                    g.name = command["name"].as_str().unwrap_or("").chars().take(40).collect();
+                    if let Some(color) = command["color"].as_str().filter(|c| GROUP_COLORS.iter().any(|(v, _)| v == c)) {
+                        g.color = color.to_string();
+                    }
+                }
+                self.save_session();
+                self.sync_toolbar();
+                return false;
+            }
+            "group_dialog_close" => {
+                self.group_dialog = None;
+                return false;
+            }
+            "group_ungroup" => {
+                if let Some((_, id)) = self.group_dialog.take() {
+                    self.tabs.iter_mut().filter(|t| t.group == Some(id)).for_each(|t| t.group = None);
+                    self.groups.retain(|g| g.id != id);
+                    self.save_session();
+                    self.sync_toolbar();
+                }
+                return false;
+            }
+            "group_close" => {
+                if let Some((_, id)) = self.group_dialog.take() {
+                    let closing: Vec<u64> = self.tabs.iter().filter(|t| t.group == Some(id)).map(|t| t.id).collect();
+                    if closing.len() == self.tabs.len() {
+                        self.open_tab(&self.new_tab_url(), false); // the window stays open
+                    }
+                    for tab in closing {
+                        self.close_tab(tab);
+                    }
+                    self.groups.retain(|g| g.id != id);
+                    self.save_session();
+                    self.sync_toolbar();
+                }
+                return false;
+            }
+            "mark_menu" => {
+                self.marks_menu = None;
+                self.mark_target = command["url"].as_str().filter(|u| self.bookmarks.iter().any(|b| b["url"] == *u)).map(str::to_string);
+                if self.mark_target.is_some() {
+                    let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
+                    let x = command["x"].as_f64().unwrap_or(0.0).clamp(0.0, (size.width - MARK_MENU.0).max(0.0));
+                    let area = Rect { position: LogicalPosition::new(x, TOOLBAR_HEIGHT + BOOKMARKS_BAR_HEIGHT).into(), size: ViewSize::new(MARK_MENU.0, MARK_MENU.1).into() };
+                    if let Some(popup) = self.build_popup(target, MARKS_HTML, "Riffle bookmark menu", area, true) {
+                        self.marks_menu = Some((popup, 0));
+                    }
+                }
+                return false;
+            }
+            "mark_action" => {
+                self.marks_menu = None;
+                let Some(url) = self.mark_target.take() else { return false };
+                match command["value"].as_str().unwrap_or("") {
+                    "open" => drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "go", "value": url}).to_string()))),
+                    "tab" => {
+                        self.open_tab(&url, false);
+                    }
+                    "window" => self.open_new_window(Some(&url)),
+                    "edit" => self.open_panel("bookmarks"),
+                    "delete" => {
+                        self.bookmarks.retain(|b| b["url"] != url.as_str());
+                        self.save_bookmarks();
+                        self.sync_toolbar();
+                    }
+                    "hide" => {
+                        self.settings["bookmarks_bar"] = json!(false);
+                        self.save_settings();
+                        self.layout();
+                        self.sync_toolbar();
+                    }
+                    _ => {}
+                }
+                return false;
+            }
             "marks_more" => {
+                self.mark_target = None;
                 self.marks_menu = None;
                 let from = command["from"].as_u64().unwrap_or(0) as usize;
                 let count = self.bookmarks.len().saturating_sub(from);
@@ -2644,7 +3005,7 @@ impl Browser {
             "marks_ready" => {
                 if let Some((popup, from)) = &self.marks_menu {
                     let marks = self.bookmarks.get(*from..).unwrap_or_default();
-                    let _ = popup.evaluate_script(&format!("render({})", json!({"marks": marks, "theme": self.settings["theme"], "private": self.private_window})));
+                    let _ = popup.evaluate_script(&format!("render({})", json!({"actions": self.mark_target.is_some(), "marks": marks, "theme": self.settings["theme"], "private": self.private_window})));
                 }
                 return false;
             }
@@ -2669,11 +3030,16 @@ impl Browser {
             }
             "tab_menu" => {
                 self.tab_menu = None;
+                self.group_dialog = None;
                 self.marks_menu = None;
                 if let Some(tab) = id.filter(|i| self.tabs.iter().any(|t| t.id == *i)) {
                     let size = self.window.inner_size().to_logical::<f64>(self.window.scale_factor());
                     let x = command["x"].as_f64().unwrap_or(0.0).clamp(0.0, (size.width - TAB_MENU_SIZE.0).max(0.0));
-                    let area = Rect { position: LogicalPosition::new(x, 36.0).into(), size: ViewSize::new(TAB_MENU_SIZE.0, TAB_MENU_SIZE.1).into() };
+                    let height = TAB_MENU_SIZE.1 + self.live_groups().iter().filter(|g| Some(g.id) != self.tabs.iter().find(|t| t.id == tab).and_then(|t| t.group)).take(4).count() as f64 * 32.0;
+                    let bar = self.bounds(true).size.to_logical::<f64>(self.window.scale_factor()).height;
+                    let y = command["y"].as_f64().map_or(36.0, |y| (y + bar).min((size.height - height).max(0.0)));
+                    self.menu_at = (x, y);
+                    let area = Rect { position: LogicalPosition::new(x, y).into(), size: ViewSize::new(TAB_MENU_SIZE.0, height).into() };
                     if let Some(popup) = self.build_popup(target, TAB_MENU_HTML, "Riffle tab menu", area, true) {
                         self.tab_menu = Some((popup, tab));
                     }
@@ -2684,22 +3050,50 @@ impl Browser {
             "tab_menu_ready" => {
                 if let Some((popup, tab)) = &self.tab_menu {
                     let pinned = self.tabs.iter().any(|t| t.id == *tab && t.pinned);
-                    let _ = popup.evaluate_script(&format!("render({})", json!({"pinned": pinned, "alone": self.tabs.len() < 2, "theme": self.settings["theme"], "private": self.private_window})));
+                    let _ = popup.evaluate_script(&format!("render({})", json!({"pinned": pinned, "group": self.tabs.iter().find(|t| t.id == *tab).and_then(|t| t.group), "groups": self.live_groups().iter().map(|g| json!({"id": g.id, "name": g.name})).collect::<Vec<_>>(), "vertical": self.settings["tabs_vertical"] == true, "alone": self.tabs.len() < 2, "theme": self.settings["theme"], "private": self.private_window})));
                 }
                 return false;
             }
             "tab_menu_close" => {
                 self.tab_menu = None;
+                self.group_dialog = None;
                 self.marks_menu = None;
                 return false;
             }
             "tab_pick" => {
                 let Some((_, tab)) = self.tab_menu.take() else { return false };
                 match command["value"].as_str().unwrap_or("") {
+                    "group_new" => {
+                        self.groups.retain(|g| self.tabs.iter().any(|t| t.group == Some(g.id)));
+                        let id = self.next_id;
+                        self.next_id += 1;
+                        let color = GROUP_COLORS[self.groups.len() % GROUP_COLORS.len()].0.to_string();
+                        self.groups.push(TabGroup { id, name: String::new(), color, collapsed: false });
+                        if let Some(t) = self.tabs.iter_mut().find(|t| t.id == tab) {
+                            t.group = Some(id);
+                        }
+                        self.save_session();
+                        self.sync_toolbar();
+                        drop(self.proxy.send_event(Msg::Toolbar(json!({"cmd": "group_menu", "group": id}).to_string())));
+                    }
+                    "group_leave" => self.put_in_group(tab, None),
+                    "side" => {
+                        self.settings["tabs_vertical"] = json!(self.settings["tabs_vertical"] != true);
+                        self.save_settings();
+                        self.apply_tab_position();
+                        self.sync_toolbar();
+                    }
+                    value if value.starts_with("group:") => {
+                        let group = value[6..].parse().ok().filter(|g| self.groups.iter().any(|x| x.id == *g));
+                        if group.is_some() {
+                            self.put_in_group(tab, group);
+                        }
+                    }
                     "pin" => {
                         if let Some(from) = self.tabs.iter().position(|t| t.id == tab) {
                             let mut moved = self.tabs.remove(from);
                             moved.pinned = !moved.pinned;
+                            moved.group = None;
                             let group = self.tabs.iter().filter(|t| t.pinned).count();
                             self.tabs.insert(group, moved);
                             self.save_session();
@@ -2714,6 +3108,8 @@ impl Browser {
                             let to = tab_position(wanted, pinned, self.tabs.len(), self.tabs[from].pinned);
                             let moved = self.tabs.remove(from);
                             self.tabs.insert(to, moved);
+                            let groups: Vec<Option<u64>> = self.tabs.iter().map(|t| t.group).collect();
+                            self.tabs[to].group = group_after_move(&groups, to);
                             self.save_session();
                             self.sync_toolbar();
                         }
@@ -2828,6 +3224,7 @@ impl Browser {
             "zoom_close" => {
                 self.zoom_popup = None;
         self.tab_menu = None;
+        self.group_dialog = None;
         self.marks_menu = None;
         self.tab_search = None;
         self.slow_note = None;
@@ -3056,7 +3453,7 @@ impl Browser {
                 if let Some(panel) = &self.panel {
                     let _ = panel.evaluate_script(&format!("showSettings({})", self.settings));
                 }
-                self.layout();
+                self.apply_tab_position();
                 self.sync_toolbar();
                 return false;
             }
@@ -3351,13 +3748,18 @@ fn ad_rule(url: &str, source: &str) -> bool {
     ENGINE.get().is_some_and(|e| is_blocked(e, url, source, "subdocument"))
 }
 
+/// A click on a link counts only for that link's own site. Anywhere else, the page is using the click to send you somewhere.
+fn click_for(click: Option<bool>, link: Option<&str>, url: &str) -> Option<bool> {
+    if click == Some(true) && link.is_some_and(|l| !same_site(l, url)) { Some(false) } else { click }
+}
+
 /// Should this top-level navigation go ahead?
 fn navigation_allowed(guard: &Guard, url: &str) -> bool {
     let source = &guard.top_url;
     if guard.vouched() || same_site(source, url) || site_is_allowed(source) || site_is_allowed(url) || popups_are_allowed(source) {
         return true;
     }
-    navigation_verdict(trash_rule(url, source), ad_rule(url, source), guard.recent_click())
+    navigation_verdict(trash_rule(url, source), ad_rule(url, source), click_for(guard.recent_click(), guard.click_link.as_deref(), url))
 }
 
 /// The redirects this stops: to a known trash site, to a known ad server unless a real link was clicked, and
@@ -3372,7 +3774,7 @@ fn popup_allowed(guard: &Guard, url: &str) -> bool {
     if site_is_allowed(source) || site_is_allowed(url) || popups_are_allowed(source) {
         return true;
     }
-    popup_verdict(trash_rule(url, source), same_site(source, url), guard.recent_click())
+    popup_verdict(trash_rule(url, source), same_site(source, url), click_for(guard.recent_click(), guard.click_link.as_deref(), url))
 }
 
 fn popup_verdict(trash: bool, same_site: bool, click: Option<bool>) -> bool {
@@ -3763,6 +4165,17 @@ fn blocked_this_month(dir: &Path) -> u64 {
 }
 
 /// Where a tab may sit: pinned tabs keep to the left group, the rest keep to the right of it.
+/// The group a tab belongs to after moving to `at`: between two tabs of a group it joins, and it stays in its own
+/// group only while still next to it, so a group is never split.
+fn group_after_move(groups: &[Option<u64>], at: usize) -> Option<u64> {
+    let before = at.checked_sub(1).and_then(|i| groups.get(i)).copied().flatten();
+    let after = groups.get(at + 1).copied().flatten();
+    if before.is_some() && before == after {
+        return before;
+    }
+    groups[at].filter(|own| before == Some(*own) || after == Some(*own))
+}
+
 fn tab_position(wanted: usize, pinned_tabs: usize, total: usize, is_pinned: bool) -> usize {
     if is_pinned { wanted.min(pinned_tabs.saturating_sub(1)) } else { wanted.clamp(pinned_tabs, total.saturating_sub(1)) }
 }
@@ -4384,6 +4797,27 @@ fn update_once(dir: &Path) -> Option<Option<String>> {
 }
 
 /// Only the installed copy updates itself: a copy someone built or carried elsewhere is theirs to manage.
+/// See-through at this alpha, or a normal window with None. Safe from any thread.
+fn set_window_alpha(hwnd: isize, alpha: Option<u8>) {
+    let hwnd = HWND(hwnd as _);
+    // SAFETY: plain style calls. A window that has already closed just makes them fail.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        match alpha {
+            Some(alpha) => {
+                SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as isize);
+                let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
+            }
+            None => drop(SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style & !(WS_EX_LAYERED.0 as isize))),
+        }
+    }
+}
+
+fn update_due(since_last: Option<Duration>, just_opened: bool) -> bool {
+    let gap = if just_opened { UPDATE_OPEN_GAP_SECS } else { UPDATE_GAP_SECS };
+    since_last.is_none_or(|a| a.as_secs() >= gap)
+}
+
 fn keep_updated(data_dir: PathBuf, proxy: EventLoopProxy<Msg>) {
     let Some(dir) = install_dir().filter(|_| is_installed()) else { return };
     std::thread::spawn(move || {
@@ -4391,16 +4825,20 @@ fn keep_updated(data_dir: PathBuf, proxy: EventLoopProxy<Msg>) {
             let _ = std::fs::remove_file(dir.join(leftover)); // fails harmlessly while an old window is open
         }
         let stamp = data_dir.join("update-check");
+        std::thread::sleep(Duration::from_secs(2)); // after the window and first page have had the machine to themselves
+        let mut just_opened = true;
         loop {
             let settings = sanitize_settings(&load_json(&data_dir.join("settings.json"))); // another window may have changed it
             let age = std::fs::metadata(&stamp).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
-            if settings["auto_update"] == true && age.is_none_or(|a| a.as_secs() >= UPDATE_GAP_SECS) {
-                let _ = std::fs::write(&stamp, "");
+            if settings["auto_update"] == true && update_due(age, just_opened) {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                let _ = std::fs::write(&stamp, now.to_string()); // rewriting an empty file wouldn't update its time
                 if let Some(Some(version)) = update_once(&dir) {
                     drop(proxy.send_event(Msg::UpdateReady(version)));
                     return;
                 }
             }
+            just_opened = false;
             std::thread::sleep(Duration::from_secs(UPDATE_WAKE_SECS));
         }
     });
@@ -4707,6 +5145,7 @@ fn sanitize_settings(raw: &Value) -> Value {
         "search_suggest": raw["search_suggest"] != false,
         "agent_mode": raw["agent_mode"] == true,
         "toolbar": sanitize_toolbar(&raw["toolbar"]),
+        "tabs_vertical": raw["tabs_vertical"] == true,
         "auto_update": raw["auto_update"] != false,
         "download_ask": raw["download_ask"] == true,
         "download_show": raw["download_show"] != false,
@@ -4918,8 +5357,8 @@ mod tests {
     #[test]
     fn bad_settings_fall_back_and_good_ones_stay() {
         let bad = sanitize_settings(&json!({"theme": "x", "accent": "red;}", "search": "javascript:alert(1)//", "home": "file:///c:/x", "adblock": "no", "max_live_tabs": 999}));
-        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "auto_update": true, "agent_mode": false, "toolbar": sanitize_toolbar(&Value::Null), "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
-        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "auto_update": false, "agent_mode": true, "toolbar": {"extensions": "hide", "downloads": "show", "shield": "hide", "private": "show", "music": "hide", "reader": "auto", "star": "show"}, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
+        assert_eq!(bad, json!({"theme": "system", "accent": DEFAULT_ACCENT, "search": SEARCH_URL, "home": "", "restore": false, "bookmarks_bar": true, "idle_sleep": true, "allow_sites": [], "allow_popups": [], "adblock": true, "max_live_tabs": 32, "auto_update": true, "agent_mode": false, "tabs_vertical": false, "toolbar": sanitize_toolbar(&Value::Null), "search_suggest": true, "download_dir": default_download_dir(), "download_ask": false, "download_show": true}));
+        let good = json!({"theme": "dark", "accent": "#112233", "search": "https://s.test/?q=", "home": "https://a.org/", "restore": true, "bookmarks_bar": false, "idle_sleep": false, "allow_sites": ["a.org"], "allow_popups": ["b.org"], "adblock": false, "max_live_tabs": 2, "auto_update": false, "agent_mode": true, "tabs_vertical": true, "toolbar": {"extensions": "hide", "downloads": "show", "shield": "hide", "private": "show", "music": "hide", "reader": "auto", "star": "show"}, "search_suggest": false, "download_dir": "C:/x", "download_ask": true, "download_show": false});
         assert_eq!(sanitize_settings(&good), good);
         assert_eq!(sanitize_settings(&Value::Null)["adblock"], true);
     }
@@ -5062,6 +5501,38 @@ mod tests {
         assert_eq!(folder_problem(&base), None); // an earlier Riffle, being updated
         std::fs::remove_dir_all(&base).unwrap();
         assert!(folder_problem(Path::new("Riffle")).is_some());
+    }
+
+    #[test]
+    fn moving_a_tab_never_splits_a_group() {
+        let (a, b) = (Some(1), Some(2));
+        assert_eq!(group_after_move(&[a, None, a], 1), a); // dropped inside a group: joins
+        assert_eq!(group_after_move(&[None, a, None], 1), a.filter(|_| false)); // on its own now: leaves
+        assert_eq!(group_after_move(&[a, a, None], 1), a); // still beside its group: stays
+        assert_eq!(group_after_move(&[a, b, a], 1), a); // into the other group's middle: joins it
+        assert_eq!(group_after_move(&[None, None], 0), None);
+        assert_eq!(group_after_move(&[b, a], 1), None); // beside another group only: leaves its own
+    }
+
+    #[test]
+    fn a_link_click_only_vouches_for_that_link() {
+        let (news, ad) = ("https://news.example/story", "https://ads.example/x");
+        assert_eq!(click_for(Some(true), Some(news), ad), Some(false)); // the reported redirect
+        assert_eq!(click_for(Some(true), Some(ad), ad), Some(true)); // the user did click that link
+        assert_eq!(click_for(Some(true), None, ad), Some(true)); // a button, such as Sign in with another site
+        assert_eq!(click_for(None, Some(news), ad), None);
+        assert!(!navigation_verdict(false, false, click_for(Some(true), Some(news), ad)));
+        assert!(!popup_verdict(false, false, click_for(Some(true), Some(news), ad)));
+    }
+
+    #[test]
+    fn opening_riffle_checks_for_updates() {
+        let mins = |m: u64| Some(Duration::from_secs(m * 60));
+        assert!(update_due(None, true));
+        assert!(update_due(mins(10), true)); // opened again ten minutes later
+        assert!(!update_due(Some(Duration::from_secs(5)), true)); // two windows opened together
+        assert!(!update_due(mins(10), false)); // left open: still daily
+        assert!(update_due(mins(1500), false));
     }
 
     #[test]
